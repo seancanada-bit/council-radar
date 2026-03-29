@@ -23,8 +23,7 @@
     RewriteRule (^\.|/\.) - [F,L]
 
     # Route everything through public/
-    RewriteCond %{ENV:REDIRECT_STATUS} ^$
-    RewriteRule ^(.*)$ public/$1 [L]
+    RewriteRule !^public/ public%{REQUEST_URI} [L]
 </IfModule>
 
 # Deny access to sensitive files
