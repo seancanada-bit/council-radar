@@ -23,8 +23,7 @@
     RewriteRule (^\.|/\.) - [F,L]
 
     # Route everything through public/
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{ENV:REDIRECT_STATUS} ^$
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 
