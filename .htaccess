@@ -8,22 +8,23 @@
     Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'"
 </IfModule>
 
-# Protect non-public directories from direct web access
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Block access to app/, cron/, logs/, sql/, templates/ directories
+    # Let SSL verification work
+    RewriteCond %{REQUEST_URI} ^/\.well-known/ [NC]
+    RewriteRule ^ - [L]
+
+    # Block access to protected directories
     RewriteRule ^app/ - [F,L]
     RewriteRule ^cron/ - [F,L]
     RewriteRule ^logs/ - [F,L]
     RewriteRule ^sql/ - [F,L]
     RewriteRule ^templates/ - [F,L]
 
-    # Block access to dotfiles
-    RewriteRule (^\.|/\.) - [F,L]
-
     # Route everything through public/
-    RewriteRule !^public/ public%{REQUEST_URI} [L]
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 
 # Deny access to sensitive files
