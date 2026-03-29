@@ -55,30 +55,11 @@ if ($error) {
     exit;
 }
 
-logMessage('deploy.log', "Update response: $response");
-
 $data = json_decode($response, true);
+$lastCommit = $data['data']['last_update']['identifier'] ?? 'unknown';
+logMessage('deploy.log', "Update result: status={$data['status']} commit=$lastCommit");
+
 if (isset($data['status']) && $data['status'] == 1) {
-    // Now trigger the actual deploy
-    $deployUrl = 'https://localhost:2083/execute/VersionControl/deploy'
-               . '?repository_root=' . urlencode($repoPath);
-
-    $ch2 = curl_init($deployUrl);
-    curl_setopt_array($ch2, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: cpanel ' . $cpanelUser . ':' . $cpanelToken,
-        ],
-        CURLOPT_TIMEOUT => 60,
-    ]);
-    $deployResponse = curl_exec($ch2);
-    $deployCode = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-    curl_close($ch2);
-
-    logMessage('deploy.log', "Deploy response (HTTP $deployCode): $deployResponse");
-    logMessage('deploy.log', "Deploy success");
     http_response_code(200);
     echo 'OK';
 } else {
