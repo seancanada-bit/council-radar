@@ -1,8 +1,7 @@
 <?php
 /**
  * GitHub webhook endpoint to trigger git pull on push events.
- * Add a secret in .env as GIT_WEBHOOK_SECRET and configure the same
- * secret in GitHub repo Settings > Webhooks.
+ * Configure GIT_WEBHOOK_SECRET in .env and in GitHub repo Settings > Webhooks.
  */
 
 require_once __DIR__ . '/../../app/config.php';
