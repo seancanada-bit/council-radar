@@ -6,8 +6,10 @@
  *   /filepro/documents/{folderId}  - browse folders
  *   /document/{docId}              - view a document
  *
- * The scraper navigates: Portal root -> Agendas folder -> year subfolder -> individual documents
- * It uses the JSON data embedded in the filepro pages to find document IDs and metadata.
+ * The portal page at /filepro/documents embeds JSON data (initialDocumentList) with fields:
+ *   Id, Title, ContentUrl, DateUpdated, FileFormat, Folder, IsPublic
+ *
+ * Navigation: Portal root -> Agendas folder -> meeting type subfolders -> year folder -> documents
  */
 
 require_once __DIR__ . '/BaseScraper.php';
@@ -17,9 +19,6 @@ class CivicWebScraper extends BaseScraper {
     // Known agenda folder names to look for (case-insensitive partial matches)
     private const AGENDA_FOLDER_PATTERNS = [
         'agenda',
-        'council agenda',
-        'committee of the whole agenda',
-        'public hearing agenda',
     ];
 
     // Meeting type mapping from folder names
@@ -28,6 +27,8 @@ class CivicWebScraper extends BaseScraper {
         'committee of the whole' => 'Committee of the Whole',
         'public hearing' => 'Public Hearing',
         'advisory planning' => 'Advisory Planning Commission',
+        'advisory design' => 'Advisory Design Panel',
+        'parks' => 'Parks Committee',
     ];
 
     public function scrapeAll(): array {
@@ -66,113 +67,222 @@ class CivicWebScraper extends BaseScraper {
 
         logMessage('scrape.log', "Scraping CivicWeb: {$muni['name']} ({$baseUrl})");
 
-        // Step 1: Fetch the portal root to find document folder IDs
-        $portalUrl = $baseUrl . '/Portal/MeetingTypeList.aspx';
+        // Step 1: Fetch the portal root document page
+        $portalUrl = $baseUrl . '/filepro/documents';
         $response = $this->fetch($portalUrl);
 
         if ($response['error']) {
-            // Try the filepro documents root as fallback
-            $portalUrl = $baseUrl . '/filepro/documents';
-            $response = $this->fetch($portalUrl);
-            if ($response['error']) {
-                throw new Exception("Failed to fetch portal: {$response['error']}");
+            throw new Exception("Failed to fetch portal: {$response['error']}");
+        }
+
+        // Step 2: Find the Agendas folder from the root
+        $items = $this->extractJsonItems($response['body']);
+        $agendaFolder = null;
+
+        foreach ($items as $item) {
+            if (!empty($item['Folder']) && $this->isAgendaFolder($item['Title'] ?? '')) {
+                $agendaFolder = $item;
+                break;
             }
         }
 
-        // Step 2: Find agenda folder links
-        $agendaFolders = $this->findAgendaFolders($response['body'], $baseUrl);
+        // Fallback: try HTML links
+        if (!$agendaFolder) {
+            $agendaFolders = $this->findAgendaFoldersHtml($response['body'], $baseUrl);
+            if (!empty($agendaFolders)) {
+                $agendaFolder = $agendaFolders[0];
+            }
+        }
 
-        if (empty($agendaFolders)) {
-            logMessage('scrape.log', "  No agenda folders found for {$muni['name']}");
+        if (!$agendaFolder) {
+            logMessage('scrape.log', "  No agenda folder found for {$muni['name']}");
             return ['meetings_found' => 0, 'folders_checked' => 0];
         }
 
-        logMessage('scrape.log', "  Found " . count($agendaFolders) . " agenda folder(s)");
+        $agendaUrl = $baseUrl . '/filepro/documents/' . ($agendaFolder['Id'] ?? $agendaFolder['id'] ?? '');
+        logMessage('scrape.log', "  Found agendas folder: " . ($agendaFolder['Title'] ?? $agendaFolder['name'] ?? 'unknown'));
 
-        // Step 3: For each agenda folder, find recent documents
-        foreach ($agendaFolders as $folder) {
-            $this->rateLimit();
+        // Step 3: Fetch the agendas folder to find sub-folders (Council Agendas, Public Hearing, etc.)
+        $this->rateLimit();
+        $agendaResponse = $this->fetch($agendaUrl);
+        if ($agendaResponse['error']) {
+            throw new Exception("Failed to fetch agendas folder: {$agendaResponse['error']}");
+        }
 
-            $folderResponse = $this->fetch($folder['url']);
-            if ($folderResponse['error']) {
-                logMessage('scrape.log', "  Failed to fetch folder {$folder['name']}: {$folderResponse['error']}");
-                continue;
+        $subItems = $this->extractJsonItems($agendaResponse['body']);
+        $meetingTypeFolders = [];
+
+        foreach ($subItems as $item) {
+            if (!empty($item['Folder'])) {
+                $meetingTypeFolders[] = $item;
+            }
+        }
+
+        // If no sub-folders, treat this folder as having documents directly
+        if (empty($meetingTypeFolders)) {
+            $meetingTypeFolders = [['Id' => $agendaFolder['Id'] ?? $agendaFolder['id'], 'Title' => 'Agendas', '_body' => $agendaResponse['body']]];
+        }
+
+        logMessage('scrape.log', "  Found " . count($meetingTypeFolders) . " meeting type folder(s)");
+
+        // Step 4: For each meeting type folder, find year folders, then documents
+        foreach ($meetingTypeFolders as $mtFolder) {
+            $folderName = $mtFolder['Title'] ?? 'Agendas';
+
+            if (isset($mtFolder['_body'])) {
+                $mtBody = $mtFolder['_body'];
+            } else {
+                $this->rateLimit();
+                $mtUrl = $baseUrl . '/filepro/documents/' . $mtFolder['Id'];
+                $mtResponse = $this->fetch($mtUrl);
+                if ($mtResponse['error']) {
+                    logMessage('scrape.log', "  Failed to fetch folder '{$folderName}': {$mtResponse['error']}");
+                    continue;
+                }
+                $mtBody = $mtResponse['body'];
             }
 
-            // Look for year subfolders or direct document listings
-            $yearFolders = $this->findYearFolders($folderResponse['body'], $baseUrl);
-            $currentYear = (int) date('Y');
+            $mtItems = $this->extractJsonItems($mtBody);
 
-            // Check current year and previous year folders
-            $yearsToCheck = [$currentYear, $currentYear - 1];
-            $foldersToScan = [];
+            // Look for year folders
+            $currentYear = (int) date('Y');
+            $yearFolders = [];
+            $directDocs = [];
+
+            foreach ($mtItems as $item) {
+                if (!empty($item['Folder'])) {
+                    $title = $item['Title'] ?? '';
+                    if (preg_match('/^(20\d{2})$/', $title, $ym)) {
+                        $year = (int) $ym[1];
+                        if ($year >= $currentYear - 1 && $year <= $currentYear + 1) {
+                            $yearFolders[$year] = $item;
+                        }
+                    }
+                } else {
+                    $directDocs[] = $item;
+                }
+            }
+
+            // If we found year folders, fetch them; otherwise use direct docs
+            $docsToProcess = [];
 
             if (!empty($yearFolders)) {
-                foreach ($yearsToCheck as $year) {
-                    if (isset($yearFolders[$year])) {
-                        $foldersToScan[] = $yearFolders[$year];
+                foreach ($yearFolders as $year => $yf) {
+                    $this->rateLimit();
+                    $yfUrl = $baseUrl . '/filepro/documents/' . $yf['Id'];
+                    $yfResponse = $this->fetch($yfUrl);
+                    if ($yfResponse['error']) continue;
+
+                    $yearDocs = $this->extractJsonItems($yfResponse['body']);
+                    foreach ($yearDocs as $doc) {
+                        if (empty($doc['Folder'])) {
+                            $docsToProcess[] = $doc;
+                        }
                     }
                 }
             } else {
-                // No year subfolders - documents are listed directly in this folder
-                $foldersToScan[] = ['url' => $folder['url'], 'body' => $folderResponse['body']];
+                $docsToProcess = $directDocs;
             }
 
-            foreach ($foldersToScan as $scanFolder) {
-                if (!isset($scanFolder['body'])) {
-                    $this->rateLimit();
-                    $subResponse = $this->fetch($scanFolder['url']);
-                    if ($subResponse['error']) continue;
-                    $scanFolder['body'] = $subResponse['body'];
+            logMessage('scrape.log', "  Folder '{$folderName}': " . count($docsToProcess) . " document(s) found");
+
+            // Filter to recent documents and fetch each
+            $recentDocs = $this->filterRecentJsonDocs($docsToProcess);
+            logMessage('scrape.log', "  Folder '{$folderName}': " . count($recentDocs) . " recent document(s)");
+
+            foreach ($recentDocs as $doc) {
+                $docUrl = $baseUrl . ($doc['ContentUrl'] ?? '/document/' . $doc['Id']);
+
+                if ($this->meetingExists($docUrl)) {
+                    continue;
                 }
 
-                $documents = $this->findDocuments($scanFolder['body'], $baseUrl);
-                $recentDocs = $this->filterRecentDocuments($documents);
-
-                logMessage('scrape.log', "  Found " . count($recentDocs) . " recent document(s) in folder");
-
-                foreach ($recentDocs as $doc) {
-                    $docUrl = $doc['url'];
-
-                    if ($this->meetingExists($docUrl)) {
-                        continue;
+                // Skip PDF files - we want the HTML/DOCX agenda content
+                $format = strtolower($doc['FileFormat'] ?? '');
+                if ($format === 'pdf') {
+                    // Check if there's a matching non-PDF version
+                    $hasPair = false;
+                    $docTitle = $doc['Title'] ?? '';
+                    foreach ($docsToProcess as $other) {
+                        if ($other['Id'] !== $doc['Id']
+                            && ($other['Title'] ?? '') === $docTitle
+                            && strtolower($other['FileFormat'] ?? '') !== 'pdf') {
+                            $hasPair = true;
+                            break;
+                        }
                     }
+                    if ($hasPair) continue; // Skip the PDF, we'll get the DOCX version
+                }
 
-                    $this->rateLimit();
+                $this->rateLimit();
 
-                    $docResponse = $this->fetch($docUrl);
-                    if ($docResponse['error']) {
-                        logMessage('scrape.log', "  Failed to fetch document: {$docResponse['error']}");
-                        continue;
-                    }
+                $docResponse = $this->fetch($docUrl);
+                if ($docResponse['error']) {
+                    logMessage('scrape.log', "  Failed to fetch document: {$docResponse['error']}");
+                    continue;
+                }
 
-                    $meetingType = $this->detectMeetingType($folder['name'], $doc['title']);
-                    $meetingDate = $this->extractMeetingDate($doc['title'], $doc['modified'] ?? null);
+                $meetingType = $this->detectMeetingType($folderName, $doc['Title'] ?? '');
+                $meetingDate = $this->extractMeetingDate($doc['Title'] ?? '', $doc['DateUpdated'] ?? null);
 
-                    $this->insertMeeting(
-                        $muni['id'],
-                        $meetingType,
-                        $meetingDate,
-                        $docUrl,
-                        $docResponse['body']
-                    );
+                $this->insertMeeting(
+                    $muni['id'],
+                    $meetingType,
+                    $meetingDate,
+                    $docUrl,
+                    $docResponse['body']
+                );
 
-                    $meetingsFound++;
-                    logMessage('scrape.log', "  Stored: {$doc['title']} ({$docUrl})");
+                $meetingsFound++;
+                logMessage('scrape.log', "  Stored: " . ($doc['Title'] ?? 'unknown') . " ({$docUrl})");
+            }
+        }
+
+        return ['meetings_found' => $meetingsFound, 'folders_checked' => count($meetingTypeFolders)];
+    }
+
+    /**
+     * Extract JSON items from embedded initialDocumentList or similar JSON data
+     */
+    private function extractJsonItems(string $html): array {
+        // Look for initialDocumentList JSON array
+        if (preg_match('/initialDocumentList\s*=\s*(\[.*?\])\s*;/s', $html, $m)) {
+            $items = json_decode($m[1], true);
+            if (is_array($items)) {
+                return $items;
+            }
+        }
+
+        // Fallback: try to find JSON array with document-like objects
+        if (preg_match('/\[\s*\{[^}]*"Id"\s*:\s*\d+[^}]*"Title"\s*:.*?\]\s*;/s', $html, $m)) {
+            $items = json_decode($m[0], true);
+            if (is_array($items)) {
+                return $items;
+            }
+        }
+
+        // Fallback: extract individual JSON objects with Id and Title
+        $items = [];
+        if (preg_match_all('/\{\s*"Id"\s*:\s*(\d+)\s*,\s*"Title"\s*:\s*"([^"]+)"[^}]*\}/s', $html, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $obj = json_decode($match[0], true);
+                if (is_array($obj)) {
+                    $items[] = $obj;
+                } else {
+                    $items[] = ['Id' => (int) $match[1], 'Title' => $match[2]];
                 }
             }
         }
 
-        return ['meetings_found' => $meetingsFound, 'folders_checked' => count($agendaFolders)];
+        return $items;
     }
 
     /**
-     * Find agenda-related folder links from the portal page HTML
+     * Fallback: find agenda folders via HTML links
      */
-    private function findAgendaFolders(string $html, string $baseUrl): array {
+    private function findAgendaFoldersHtml(string $html, string $baseUrl): array {
         $folders = [];
 
-        // Pattern 1: filepro document links
         if (preg_match_all('/<a[^>]+href="([^"]*\/filepro\/documents\/(\d+))"[^>]*>([^<]+)/i', $html, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $name = trim(strip_tags($match[3]));
@@ -182,40 +292,6 @@ class CivicWebScraper extends BaseScraper {
                         $url = $baseUrl . $url;
                     }
                     $folders[] = ['name' => $name, 'url' => $url, 'id' => $match[2]];
-                }
-            }
-        }
-
-        // Pattern 2: JSON data in script blocks (CivicWeb embeds folder data as JSON)
-        if (preg_match_all('/\{[^}]*"Name"\s*:\s*"([^"]+)"[^}]*"ContentUrl"\s*:\s*"([^"]+)"[^}]*/i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $match) {
-                $name = $match[1];
-                if ($this->isAgendaFolder($name)) {
-                    $url = $match[2];
-                    if (strpos($url, 'http') !== 0) {
-                        $url = $baseUrl . $url;
-                    }
-                    // Avoid duplicate URLs
-                    $exists = false;
-                    foreach ($folders as $f) {
-                        if ($f['url'] === $url) { $exists = true; break; }
-                    }
-                    if (!$exists) {
-                        $folders[] = ['name' => $name, 'url' => $url];
-                    }
-                }
-            }
-        }
-
-        // If no agenda-specific folders found, look for any folder with "Agenda" in it
-        if (empty($folders)) {
-            if (preg_match_all('/<a[^>]+href="([^"]*(?:\/filepro\/documents\/|\/document\/)(\d+))"[^>]*>([^<]*agenda[^<]*)/i', $html, $matches, PREG_SET_ORDER)) {
-                foreach ($matches as $match) {
-                    $url = $match[1];
-                    if (strpos($url, 'http') !== 0) {
-                        $url = $baseUrl . $url;
-                    }
-                    $folders[] = ['name' => trim($match[3]), 'url' => $url];
                 }
             }
         }
@@ -237,134 +313,39 @@ class CivicWebScraper extends BaseScraper {
     }
 
     /**
-     * Find year subfolder links and return mapped by year
+     * Filter JSON document items to only those from the last 7 days or next 14 days
      */
-    private function findYearFolders(string $html, string $baseUrl): array {
-        $years = [];
-        $currentYear = (int) date('Y');
-
-        // Match links that are just year numbers (2024, 2025, 2026, etc.)
-        // Pattern: links to /filepro/documents/{id} with year as text
-        if (preg_match_all('/<a[^>]+href="([^"]*\/filepro\/documents\/(\d+))"[^>]*>\s*(20\d{2})\s*</i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $match) {
-                $year = (int) $match[3];
-                if ($year >= $currentYear - 1 && $year <= $currentYear + 1) {
-                    $url = $match[1];
-                    if (strpos($url, 'http') !== 0) {
-                        $url = $baseUrl . $url;
-                    }
-                    $years[$year] = ['url' => $url, 'id' => $match[2]];
-                }
-            }
-        }
-
-        // Also try JSON data pattern
-        if (preg_match_all('/\{[^}]*"Name"\s*:\s*"(20\d{2})"[^}]*"ContentUrl"\s*:\s*"([^"]+)"[^}]*/i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $match) {
-                $year = (int) $match[1];
-                if ($year >= $currentYear - 1 && $year <= $currentYear + 1 && !isset($years[$year])) {
-                    $url = $match[2];
-                    if (strpos($url, 'http') !== 0) {
-                        $url = $baseUrl . $url;
-                    }
-                    $years[$year] = ['url' => $url];
-                }
-            }
-        }
-
-        return $years;
-    }
-
-    /**
-     * Find individual document entries from a folder page
-     */
-    private function findDocuments(string $html, string $baseUrl): array {
-        $docs = [];
-
-        // Pattern 1: JSON embedded data with document details
-        // CivicWeb typically embeds document metadata as JSON arrays
-        if (preg_match_all('/\{[^{}]*"Name"\s*:\s*"([^"]+)"[^{}]*"ContentUrl"\s*:\s*"(\/document\/\d+)"[^{}]*"Modified"\s*:\s*"([^"]+)"[^{}]*/i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $match) {
-                $url = $baseUrl . $match[2];
-                $docs[] = [
-                    'title' => $match[1],
-                    'url' => $url,
-                    'modified' => $match[3],
-                ];
-            }
-        }
-
-        // Pattern 2: Also try reversed field order in JSON
-        if (preg_match_all('/\{[^{}]*"ContentUrl"\s*:\s*"(\/document\/\d+)"[^{}]*"Name"\s*:\s*"([^"]+)"[^{}]*"Modified"\s*:\s*"([^"]+)"[^{}]*/i', $html, $matches, PREG_SET_ORDER)) {
-            foreach ($matches as $match) {
-                $url = $baseUrl . $match[1];
-                // Avoid duplicates
-                $exists = false;
-                foreach ($docs as $d) {
-                    if ($d['url'] === $url) { $exists = true; break; }
-                }
-                if (!$exists) {
-                    $docs[] = [
-                        'title' => $match[2],
-                        'url' => $url,
-                        'modified' => $match[3],
-                    ];
-                }
-            }
-        }
-
-        // Pattern 3: Direct HTML links to /document/{id}
-        if (empty($docs)) {
-            if (preg_match_all('/<a[^>]+href="([^"]*\/document\/(\d+))"[^>]*>([^<]+)/i', $html, $matches, PREG_SET_ORDER)) {
-                foreach ($matches as $match) {
-                    $url = $match[1];
-                    if (strpos($url, 'http') !== 0) {
-                        $url = $baseUrl . $url;
-                    }
-                    $docs[] = [
-                        'title' => trim(strip_tags($match[3])),
-                        'url' => $url,
-                        'modified' => null,
-                    ];
-                }
-            }
-        }
-
-        return $docs;
-    }
-
-    /**
-     * Filter documents to only those from the last 7 days or next 14 days
-     */
-    private function filterRecentDocuments(array $documents): array {
+    private function filterRecentJsonDocs(array $documents): array {
         $cutoffPast = strtotime('-7 days');
         $cutoffFuture = strtotime('+14 days');
-        $now = time();
         $recent = [];
 
         foreach ($documents as $doc) {
-            // Try to extract date from the document title first
-            $date = $this->extractMeetingDate($doc['title'], $doc['modified'] ?? null);
+            $title = $doc['Title'] ?? '';
+            $dateUpdated = $doc['DateUpdated'] ?? null;
 
-            if ($date) {
-                $ts = strtotime($date);
+            // Try to extract meeting date from the title
+            $meetingDate = $this->extractMeetingDate($title, $dateUpdated);
+
+            if ($meetingDate) {
+                $ts = strtotime($meetingDate);
                 if ($ts >= $cutoffPast && $ts <= $cutoffFuture) {
                     $recent[] = $doc;
                     continue;
                 }
             }
 
-            // If we can't determine the date, try the modified timestamp
-            if (!empty($doc['modified'])) {
-                $modTs = strtotime($doc['modified']);
-                if ($modTs && $modTs >= $cutoffPast) {
+            // Fallback to DateUpdated field
+            if ($dateUpdated) {
+                $ts = strtotime($dateUpdated);
+                if ($ts && $ts >= $cutoffPast) {
                     $recent[] = $doc;
                     continue;
                 }
             }
 
-            // If no date info at all, include it (better to over-include than miss)
-            if (!$date && empty($doc['modified'])) {
+            // If no date info at all, include it
+            if (!$meetingDate && !$dateUpdated) {
                 $recent[] = $doc;
             }
         }
@@ -376,8 +357,7 @@ class CivicWebScraper extends BaseScraper {
      * Extract a meeting date from the document title
      * Typical formats: "March 16 - Council Agenda", "January 19, 2026 Council Meeting"
      */
-    private function extractMeetingDate(string $title, ?string $modified = null): ?string {
-        // Pattern: "Month Day" at the beginning of the title
+    private function extractMeetingDate(string $title, ?string $dateUpdated = null): ?string {
         $months = 'January|February|March|April|May|June|July|August|September|October|November|December';
 
         // "March 16 - Council Agenda" or "March 16, 2026 Council Agenda"
@@ -392,9 +372,9 @@ class CivicWebScraper extends BaseScraper {
             return $m[1];
         }
 
-        // Fall back to modified date if available
-        if ($modified) {
-            return $this->parseDate($modified);
+        // Fall back to DateUpdated
+        if ($dateUpdated) {
+            return $this->parseDate($dateUpdated);
         }
 
         return null;
