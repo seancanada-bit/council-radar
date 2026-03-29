@@ -88,7 +88,7 @@ layoutHeader(
                     <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
                         <?php foreach ($keywords as $kw): ?>
                         <span style="display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.78rem; font-weight: 500; background: #ebf4ff; color: #2b6cb0;">
-                            <?php echo h($kw); ?>
+                            <?php echo h(is_array($kw) ? ($kw['keyword'] ?? '') : $kw); ?>
                         </span>
                         <?php endforeach; ?>
                     </div>
