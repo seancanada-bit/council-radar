@@ -75,7 +75,7 @@ layoutHeader(
                         <span style="font-weight: 600; color: #1a365d;"><?php echo h($item['municipality_name']); ?></span>
                         <span style="font-size: 0.85rem; color: #718096;">
                             <?php echo h($item['meeting_type'] ?: 'Council Meeting'); ?>
-                            - <?php echo date('M j, Y', strtotime($item['meeting_date'])); ?>
+                            - <?php echo $item['meeting_date'] ? date('M j, Y', strtotime($item['meeting_date'])) : 'Date TBD'; ?>
                         </span>
                     </div>
                     <h3 style="margin: 0 0 0.75rem; font-size: 1.05rem; line-height: 1.4;">
