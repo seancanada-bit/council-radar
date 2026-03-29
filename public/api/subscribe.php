@@ -25,7 +25,7 @@ if (!$input) {
 $email   = trim($input['email'] ?? '');
 $name    = trim($input['name'] ?? '');
 $org     = trim($input['organization'] ?? '');
-$consent = $input['consent'] ?? false;
+$consent = $input['casl_consent'] ?? $input['consent'] ?? false;
 
 // Validate email
 if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
