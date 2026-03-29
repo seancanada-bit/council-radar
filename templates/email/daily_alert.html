@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CouncilRadar Daily Alert</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f7fafc; font-family:Arial, Helvetica, sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f7fafc;">
+<tr>
+<td align="center" style="padding:20px 10px;">
+
+<!-- Main container -->
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:8px; overflow:hidden;">
+
+<!-- Header -->
+<tr>
+<td style="background-color:#1a365d; padding:24px 30px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td>
+<h1 style="margin:0; font-size:24px; font-weight:bold; color:#ffffff; letter-spacing:0.5px;">CouncilRadar</h1>
+<p style="margin:6px 0 0 0; font-size:13px; color:#a0aec0;">Municipal Agenda Monitoring</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- Date range bar -->
+<tr>
+<td style="background-color:#2b6cb0; padding:10px 30px;">
+<p style="margin:0; font-size:13px; color:#ffffff;">Daily Alert - {{DATE_RANGE}}</p>
+</td>
+</tr>
+
+<!-- Body content -->
+<tr>
+<td style="padding:24px 30px;">
+{{CONTENT}}
+</td>
+</tr>
+
+<!-- Divider -->
+<tr>
+<td style="padding:0 30px;">
+<hr style="border:none; border-top:1px solid #e2e8f0; margin:0;">
+</td>
+</tr>
+
+<!-- CASL Footer -->
+<tr>
+<td style="padding:20px 30px; background-color:#f7fafc;">
+<p style="margin:0 0 6px 0; font-size:12px; color:#718096; line-height:1.5;">
+CouncilRadar - Municipal Agenda Monitoring<br>
+Operated by Pacific Logo Design<br>
+{{CASL_ADDRESS}}<br>
+{{CASL_EMAIL}}
+</p>
+<p style="margin:10px 0 0 0; font-size:11px; color:#a0aec0; line-height:1.5;">
+You are receiving this email because you subscribed at councilradar.ca on {{CONSENT_DATE}}.
+</p>
+<p style="margin:6px 0 0 0; font-size:11px;">
+<a href="{{UNSUBSCRIBE_URL}}" style="color:#2b6cb0; text-decoration:underline;">Unsubscribe</a>
+</p>
+</td>
+</tr>
+
+</table>
+<!-- End main container -->
+
+</td>
+</tr>
+</table>
+</body>
+</html>
