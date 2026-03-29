@@ -1,6 +1,4 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
 /**
  * GitHub webhook endpoint to trigger git pull via cPanel UAPI.
  * Configure GIT_WEBHOOK_SECRET in .env and in GitHub repo Settings > Webhooks.
