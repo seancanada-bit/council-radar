@@ -36,6 +36,7 @@ $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_SSL_VERIFYHOST => 0,
     CURLOPT_HTTPHEADER => [
         'Authorization: cpanel ' . $cpanelUser . ':' . $cpanelToken,
     ],
