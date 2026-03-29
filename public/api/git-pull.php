@@ -25,7 +25,7 @@ if ($secret) {
 // Call cPanel UAPI to pull the repository
 $cpanelUser = env('CPANEL_USER');
 $cpanelToken = env('CPANEL_API_TOKEN');
-$repoPath = '/home/seanw2/councilradar';
+$repoPath = '/home/seanw2/public_html/councilradar.ca';
 
 $url = 'https://localhost:2083/execute/VersionControl/update'
      . '?repository_root=' . urlencode($repoPath);
