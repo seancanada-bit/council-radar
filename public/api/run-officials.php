@@ -115,6 +115,7 @@ switch ($action) {
         $scraperMap = [
             'provincial' => ['file' => 'ProvincialScraper.php', 'class' => 'ProvincialScraper'],
             'municipal' => ['file' => 'LocalGovScraper.php', 'class' => 'LocalGovScraper'],
+            'regional_district' => ['file' => 'RegionalDistrictScraper.php', 'class' => 'RegionalDistrictScraper'],
         ];
 
         if (!isset($scraperMap[$level])) {
