@@ -26,7 +26,7 @@ class RegionalDistrictScraper extends BaseScraper {
             'municipalities' => ['Parksville', 'Nanaimo'],
         ],
         'Thompson-Nicola Regional District' => [
-            'url' => 'https://www.tnrd.ca/regional-government/board-of-directors/',
+            'url' => 'https://tnrd.civicweb.net/portal/members.aspx?id=25',
             'municipalities' => ['Kamloops', 'Clearwater', 'Sun Peaks'],
         ],
         'Regional District of East Kootenay' => [
@@ -35,10 +35,11 @@ class RegionalDistrictScraper extends BaseScraper {
         ],
         'Capital Regional District' => [
             'url' => 'https://www.crd.ca/government-administration/boards-committees/board-directors',
+            'pages' => 3,
             'municipalities' => ['Colwood', 'Victoria'],
         ],
         'Regional District of Central Okanagan' => [
-            'url' => 'https://www.rdco.com/en/your-government/regional-board.aspx?_mid_=40801',
+            'url' => 'https://www.rdco.com/your-government/regional-board/',
             'municipalities' => ['Kelowna'],
         ],
         'Regional District of Bulkley-Nechako' => [
@@ -109,26 +110,34 @@ class RegionalDistrictScraper extends BaseScraper {
     }
 
     /**
-     * Scrape a single regional district board page
+     * Scrape a single regional district board page (handles pagination)
      */
     private function scrapeRegionalDistrict(string $rdName, array $config): void {
         $url = $config['url'];
-        $this->writeLog("Scraping: {$rdName}");
+        $pages = $config['pages'] ?? 1;
+        $this->writeLog("Scraping: {$rdName}" . ($pages > 1 ? " ({$pages} pages)" : ''));
 
-        $this->rateLimit();
-        $result = $this->fetch($url);
+        $allDirectors = [];
 
-        if ($result['error']) {
-            $this->writeLog("  Failed: " . $result['error']);
-            return;
+        for ($page = 0; $page < $pages; $page++) {
+            $pageUrl = $pages > 1 ? $url . '?page=' . $page : $url;
+
+            $this->rateLimit();
+            $result = $this->fetch($pageUrl);
+
+            if ($result['error']) {
+                $this->writeLog("  Failed" . ($pages > 1 ? " (page $page)" : '') . ": " . $result['error']);
+                if ($page === 0) return; // First page failed, skip entirely
+                continue;
+            }
+
+            $directors = $this->parseBoardPage($result['body'], $rdName);
+            $allDirectors = array_merge($allDirectors, $directors);
         }
 
-        $html = $result['body'];
-        $directors = $this->parseBoardPage($html, $rdName);
+        $this->writeLog("  Found " . count($allDirectors) . " director(s)");
 
-        $this->writeLog("  Found " . count($directors) . " director(s)");
-
-        foreach ($directors as $director) {
+        foreach ($allDirectors as $director) {
             $this->upsertDirector($director, $rdName);
         }
     }

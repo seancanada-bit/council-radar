@@ -219,6 +219,33 @@ class LocalGovScraper extends BaseScraper {
             }
         }
 
+        // Strategy 2b: <strong>Name</strong> followed by nearby mailto (Nanaimo style)
+        // No Mayor/Councillor prefix required - just bold name + email
+        if (empty($contacts)) {
+            if (preg_match_all('/<(?:strong|b)[^>]*>\s*([A-Z][a-z]+(?:\s+[A-Z]\'?[a-z]+)+)\s*<\/(?:strong|b)>/si', $html, $boldNames, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+                foreach ($boldNames as $bn) {
+                    $name = trim($this->stripHtml($bn[1][0]));
+                    $offset = $bn[0][1];
+
+                    // Look for mailto within 400 chars after the bold name
+                    $after = substr($html, $offset, 400);
+                    if (preg_match('/mailto:([^"\'>\s]+)/i', $after, $em)) {
+                        $email = trim($em[1]);
+                        if ($this->isValidContact($name, $email)) {
+                            // Detect role from context before the name
+                            $before = substr($html, max(0, $offset - 200), 200);
+                            $role = (stripos($before, 'mayor') !== false || stripos($after, 'mayor') !== false) ? 'Mayor' : 'Councillor';
+                            $phone = '';
+                            if (preg_match('/(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/', $after, $pm)) {
+                                $phone = $this->cleanPhone($pm[1]);
+                            }
+                            $contacts[] = ['name' => $name, 'email' => $email, 'phone' => $phone, 'role' => $role];
+                        }
+                    }
+                }
+            }
+        }
+
         // Strategy 3: Table rows with name and mailto in same row
         if (empty($contacts)) {
             if (preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $html, $rows)) {
