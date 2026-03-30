@@ -181,179 +181,164 @@ class LocalGovScraper extends BaseScraper {
     private function parseCouncilPage(string $html, string $municipality): array {
         $contacts = [];
 
-        // Strategy 1: Find mailto links near person names
-        // Most council pages have patterns like:
-        //   <a href="mailto:email@city.ca">email@city.ca</a>
-        //   near a name in a heading, bold text, or table cell
-
-        // Extract all emails from the page
-        $emails = [];
-        if (preg_match_all('/mailto:([^"\'>\s]+)/i', $html, $emailMatches)) {
-            $emails = array_unique($emailMatches[1]);
-        }
-
-        // Extract all person-like names near titles like Mayor, Councillor, Council
-        // Look for patterns: "Mayor Name", "Councillor Name", or names in headings near emails
-        $namePatterns = [
-            '/(?:Mayor|Councillor|Councilor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i',
-            '/<(?:h[1-6]|strong|b)[^>]*>\s*(?:Mayor|Councillor|Councilor)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*<\/(?:h[1-6]|strong|b)>/i',
-        ];
-
-        $names = [];
-        foreach ($namePatterns as $pattern) {
-            if (preg_match_all($pattern, $html, $nameMatches)) {
-                foreach ($nameMatches[1] as $name) {
-                    $name = trim($name);
-                    if (strlen($name) > 4 && strlen($name) < 60) {
-                        $names[] = $name;
-                    }
+        // Strategy 1: "Mayor/Councillor Name: mailto:email" inline pattern (Revelstoke style)
+        // e.g. "Councillor Matt Cherry: <a href="mailto:mcherry@revelstoke.ca">..."
+        if (preg_match_all('/(?:Mayor|Councillor|Councilor)\s+([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)?[A-Za-z]+(?:\s+[A-Za-z]+)*)[\s:]*<a[^>]+mailto:([^"\'>\s]+)/si', $html, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $name = trim($m[1]);
+                $email = trim($m[2]);
+                $role = (stripos($m[0], 'Mayor') !== false) ? 'Mayor' : 'Councillor';
+                if ($this->isValidContact($name, $email)) {
+                    $contacts[] = ['name' => $name, 'email' => $email, 'phone' => '', 'role' => $role];
                 }
             }
         }
 
-        // Match names to emails by proximity in HTML or by name-email pattern
-        foreach ($emails as $email) {
-            // Skip generic emails
-            $emailLower = strtolower($email);
-            if (preg_match('/^(info|admin|city|council|clerk|reception|general)@/i', $email)) continue;
-
-            // Try to find a name associated with this email
-            $associatedName = $this->findNameNearEmail($html, $email, $names);
-
-            if ($associatedName) {
-                $role = $this->detectRoleFromContext($html, $associatedName, $email);
-                $phone = $this->findPhoneNearName($html, $associatedName);
-
-                $contacts[] = [
-                    'name' => $associatedName,
-                    'email' => $email,
-                    'phone' => $phone,
-                    'role' => $role,
-                ];
-            }
-        }
-
-        // Fallback: if we found emails but no name matches, try table parsing
+        // Strategy 2: "MAYOR/COUNCILLOR NAME" heading followed by mailto nearby
+        // e.g. "<strong>MAYOR DOUG O'BRIEN</strong>...mailto:mayor@parksville.ca"
         if (empty($contacts)) {
-            $contacts = $this->parseCouncilTable($html);
-        }
+            if (preg_match_all('/<(?:h[1-6]|strong|b)[^>]*>\s*(?:MAYOR|COUNCILLOR|Mayor|Councillor)\s+(.*?)\s*<\/(?:h[1-6]|strong|b)>/si', $html, $headingMatches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+                foreach ($headingMatches as $hm) {
+                    $name = trim($this->stripHtml($hm[1][0]));
+                    $offset = $hm[0][1];
+                    $role = (stripos($hm[0][0], 'MAYOR') !== false || stripos($hm[0][0], 'Mayor') !== false) ? 'Mayor' : 'Councillor';
 
-        return $contacts;
-    }
-
-    /**
-     * Find a person name near an email address in the HTML
-     */
-    private function findNameNearEmail(string $html, string $email, array $knownNames): ?string {
-        $emailPos = strpos($html, $email);
-        if ($emailPos === false) return null;
-
-        // Look in a 500 char window around the email
-        $start = max(0, $emailPos - 500);
-        $context = substr($html, $start, 1000);
-        $contextText = $this->stripHtml($context);
-
-        // Check if any known name appears near this email
-        foreach ($knownNames as $name) {
-            if (stripos($contextText, $name) !== false) {
-                return $name;
-            }
-        }
-
-        // Try to extract a name from the email address itself
-        // e.g., CouncillorBeil@parksville.ca -> look for "Beil" in known names
-        if (preg_match('/(?:councillor|mayor)?([a-z]+)@/i', $email, $m)) {
-            $emailName = $m[1];
-            foreach ($knownNames as $name) {
-                if (stripos($name, $emailName) !== false) {
-                    return $name;
-                }
-            }
-        }
-
-        // Try to find a capitalized name in the context
-        if (preg_match('/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/', $contextText, $m)) {
-            $candidate = trim($m[1]);
-            if (strlen($candidate) > 4 && strlen($candidate) < 60) {
-                return $candidate;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Detect if someone is Mayor or Councillor from surrounding HTML context
-     */
-    private function detectRoleFromContext(string $html, string $name, string $email): string {
-        $pos = strpos($html, $name) ?: strpos($html, $email);
-        if ($pos === false) return 'Councillor';
-
-        $start = max(0, $pos - 200);
-        $context = strtolower(substr($html, $start, 400 + strlen($name)));
-
-        if (strpos($context, 'mayor') !== false) return 'Mayor';
-        return 'Councillor';
-    }
-
-    /**
-     * Find a phone number near a person's name in the HTML
-     */
-    private function findPhoneNearName(string $html, string $name): string {
-        $pos = strpos($html, $name);
-        if ($pos === false) return '';
-
-        $context = substr($html, $pos, 500);
-        if (preg_match('/(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/', $context, $m)) {
-            return $this->cleanPhone($m[1]);
-        }
-        return '';
-    }
-
-    /**
-     * Parse a council page that uses a table format
-     */
-    private function parseCouncilTable(string $html): array {
-        $contacts = [];
-
-        if (preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $html, $rows)) {
-            foreach ($rows[1] as $row) {
-                if (strpos($row, '<th') !== false) continue;
-
-                $email = '';
-                if (preg_match('/mailto:([^"\'>\s]+)/i', $row, $em)) {
-                    $email = trim($em[1]);
-                    if (preg_match('/^(info|admin|city|council|clerk)@/i', $email)) continue;
-                }
-
-                $name = '';
-                $cells = [];
-                if (preg_match_all('/<td[^>]*>(.*?)<\/td>/si', $row, $cellMatches)) {
-                    $cells = $cellMatches[1];
-                }
-                if (!empty($cells)) {
-                    $name = trim($this->stripHtml($cells[0]));
-                }
-
-                if ($name && $email && strlen($name) > 2) {
-                    $role = 'Councillor';
-                    if (stripos($row, 'mayor') !== false || stripos($name, 'mayor') !== false) {
-                        $name = preg_replace('/^Mayor\s+/i', '', $name);
-                        $role = 'Mayor';
+                    // Look for mailto within 500 chars after the heading
+                    $after = substr($html, $offset, 800);
+                    if (preg_match('/mailto:([^"\'>\s]+)/i', $after, $em)) {
+                        $email = trim($em[1]);
+                        if ($this->isValidContact($name, $email)) {
+                            $phone = '';
+                            if (preg_match('/(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/', $after, $pm)) {
+                                $phone = $this->cleanPhone($pm[1]);
+                            }
+                            $contacts[] = ['name' => $name, 'email' => $email, 'phone' => $phone, 'role' => $role];
+                        }
                     }
-                    $name = preg_replace('/^Councillor\s+/i', '', $name);
+                }
+            }
+        }
 
-                    $contacts[] = [
-                        'name' => $name,
-                        'email' => $email,
-                        'phone' => '',
-                        'role' => $role,
-                    ];
+        // Strategy 3: Table rows with name and mailto in same row
+        if (empty($contacts)) {
+            if (preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $html, $rows)) {
+                foreach ($rows[1] as $row) {
+                    if (strpos($row, '<th') !== false) continue;
+                    if (!preg_match('/mailto:([^"\'>\s]+)/i', $row, $em)) continue;
+
+                    $email = trim($em[1]);
+                    if (!$this->isValidEmail($email)) continue;
+
+                    // Get first cell text as name
+                    if (preg_match('/<td[^>]*>(.*?)<\/td>/si', $row, $cell)) {
+                        $name = trim($this->stripHtml($cell[1]));
+                        $name = preg_replace('/^(?:Mayor|Councillor|Councilor)\s+/i', '', $name);
+                        $role = (stripos($row, 'mayor') !== false) ? 'Mayor' : 'Councillor';
+
+                        if ($this->isValidContact($name, $email)) {
+                            $phone = '';
+                            if (preg_match('/(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/', $row, $pm)) {
+                                $phone = $this->cleanPhone($pm[1]);
+                            }
+                            $contacts[] = ['name' => $name, 'email' => $email, 'phone' => $phone, 'role' => $role];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Strategy 4: Name as link text with mailto nearby in same container
+        // e.g. <a href="/profile">Name</a> ... <a href="mailto:email">
+        if (empty($contacts)) {
+            // Split page into sections by common delimiters
+            $sections = preg_split('/<(?:hr|\/section|\/article|\/div>\s*<div)/i', $html);
+            foreach ($sections as $section) {
+                $sectionNames = [];
+                $sectionEmails = [];
+
+                // Find names with title prefixes
+                if (preg_match_all('/(?:Mayor|Councillor|Councilor)\s+([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)?[A-Za-z]+(?:\s+[A-Za-z]+)*)/i', $section, $nm)) {
+                    $sectionNames = $nm[1];
+                }
+
+                // Find emails
+                if (preg_match_all('/mailto:([^"\'>\s]+)/i', $section, $em)) {
+                    $sectionEmails = $em[1];
+                }
+
+                // If we have exactly one name and one email in this section, pair them
+                if (count($sectionNames) === 1 && count($sectionEmails) === 1) {
+                    $name = trim($sectionNames[0]);
+                    $email = trim($sectionEmails[0]);
+                    if ($this->isValidContact($name, $email)) {
+                        $contacts[] = ['name' => $name, 'email' => $email, 'phone' => '', 'role' => 'Councillor'];
+                    }
+                }
+            }
+        }
+
+        // Strategy 5: Paired by email username matching known names on page
+        // Extract all person names and all emails, match by email prefix
+        if (empty($contacts)) {
+            $allEmails = [];
+            if (preg_match_all('/mailto:([^"\'>\s]+)/i', $html, $em)) {
+                $allEmails = array_unique($em[1]);
+            }
+
+            $allNames = [];
+            if (preg_match_all('/(?:Mayor|Councillor|Councilor)\s+([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)?[A-Za-z]+(?:\s+[A-Za-z]+)*)/i', $html, $nm)) {
+                $allNames = array_unique($nm[1]);
+            }
+
+            foreach ($allEmails as $email) {
+                if (!$this->isValidEmail($email)) continue;
+
+                // Try to match email prefix to a name
+                // e.g. dkobayashi@colwood.ca -> Doug Kobayashi
+                $prefix = strtolower(explode('@', $email)[0]);
+                foreach ($allNames as $name) {
+                    $parts = preg_split('/\s+/', $name);
+                    $lastName = strtolower(end($parts));
+                    $firstName = strtolower($parts[0]);
+                    $firstInit = substr($firstName, 0, 1);
+
+                    // Match patterns: flast, firstlast, first.last, councillorLast
+                    if ($prefix === $firstInit . $lastName
+                        || $prefix === $firstName . '.' . $lastName
+                        || $prefix === $firstName . $lastName
+                        || $prefix === 'councillor' . $lastName
+                        || $prefix === 'mayor') {
+                        $role = ($prefix === 'mayor' || stripos($html, 'Mayor ' . $name) !== false) ? 'Mayor' : 'Councillor';
+                        $contacts[] = ['name' => $name, 'email' => $email, 'phone' => '', 'role' => $role];
+                        break;
+                    }
                 }
             }
         }
 
         return $contacts;
+    }
+
+    /**
+     * Check if a name looks like a real person (not an org or junk)
+     */
+    private function isValidContact(string $name, string $email): bool {
+        if (strlen($name) < 4 || strlen($name) > 60) return false;
+        if (!$this->isValidEmail($email)) return false;
+        // Reject organization-like names
+        if (preg_match('/^(and |the |community |city |town |district |bulkley|school|society|association)/i', $name)) return false;
+        // Must have at least two words (first + last)
+        if (str_word_count($name) < 2) return false;
+        return true;
+    }
+
+    /**
+     * Check if an email is a personal address (not generic)
+     */
+    private function isValidEmail(string $email): bool {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
+        if (preg_match('/^(info|admin|city|council|clerk|reception|general|foi|cityhall|mayorandcouncil|mayor\.council|communications|finance|planning|engineering|hr|webmaster|postmaster)@/i', $email)) return false;
+        return true;
     }
 
     /**
