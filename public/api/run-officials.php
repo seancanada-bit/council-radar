@@ -151,6 +151,44 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'test-civicinfo':
+        // Test if CivicInfo BC is accessible from this server
+        $testUrl = 'https://www.civicinfo.bc.ca/municipalities?id=1';
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $testUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            CURLOPT_HTTPHEADER => [
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language: en-CA,en-US;q=0.9,en;q=0.8',
+                'Referer: https://www.civicinfo.bc.ca/',
+            ],
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
+
+        $hasOfficials = $body ? (bool) preg_match('/Elected\s+Officials|Mayor|Councillor/i', $body) : false;
+        $title = '';
+        if ($body && preg_match('/<h1[^>]*>(.*?)<\/h1>/si', $body, $hm)) {
+            $title = strip_tags($hm[1]);
+        }
+
+        echo json_encode([
+            'url' => $testUrl,
+            'http_code' => $code,
+            'curl_error' => $err ?: null,
+            'body_length' => strlen($body ?: ''),
+            'page_title' => $title,
+            'has_officials_section' => $hasOfficials,
+            'body_preview' => $body ? substr(strip_tags($body), 0, 500) : null,
+        ], JSON_PRETTY_PRINT);
+        break;
+
     default:
-        echo json_encode(['error' => 'Unknown action', 'available' => ['setup', 'run', 'results']]);
+        echo json_encode(['error' => 'Unknown action', 'available' => ['setup', 'run', 'results', 'test-civicinfo']]);
 }
