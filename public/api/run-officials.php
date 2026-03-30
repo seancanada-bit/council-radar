@@ -197,6 +197,63 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'import-seed':
+        require_once __DIR__ . '/../../app/db.php';
+        $seedFile = __DIR__ . '/../../config/seed_officials.json';
+        if (!file_exists($seedFile)) {
+            echo json_encode(['error' => 'Seed file not found']);
+            break;
+        }
+        $data = json_decode(file_get_contents($seedFile), true);
+        if (!$data) {
+            echo json_encode(['error' => 'Invalid JSON']);
+            break;
+        }
+
+        $inserted = 0;
+        $updated = 0;
+        foreach ($data as $official) {
+            $name = trim($official['name'] ?? '');
+            $jurisdiction = trim($official['jurisdiction'] ?? '');
+            $email = trim($official['email'] ?? '');
+            $role = trim($official['role'] ?? '');
+            $level = trim($official['level'] ?? 'municipal');
+
+            if (!$name || !$jurisdiction) continue;
+
+            $levelMap = ['municipal' => 'municipal', 'regional' => 'regional_district', 'regional_district' => 'regional_district'];
+            $govLevel = $levelMap[$level] ?? 'municipal';
+
+            $parts = preg_split('/\s+/', $name);
+            $lastName = array_pop($parts);
+            $firstName = implode(' ', $parts);
+
+            $municipalityId = null;
+            if ($govLevel === 'municipal') {
+                $stmt = $db->prepare('SELECT id FROM municipalities WHERE name LIKE ? LIMIT 1');
+                $stmt->execute(["%{$jurisdiction}%"]);
+                $municipalityId = $stmt->fetchColumn() ?: null;
+            }
+
+            $stmt = $db->prepare('SELECT id, email FROM elected_officials WHERE name = ? AND jurisdiction_name = ? AND government_level = ?');
+            $stmt->execute([$name, $jurisdiction, $govLevel]);
+            $existing = $stmt->fetch();
+
+            if ($existing) {
+                $stmt = $db->prepare('UPDATE elected_officials SET first_name = ?, last_name = ?, role = ?, email = COALESCE(NULLIF(?, ""), email), source_name = COALESCE(source_name, ?), updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$firstName, $lastName, $role, $email, 'seed_data', $existing['id']]);
+                $updated++;
+            } else {
+                $confidence = $email ? 2 : 1;
+                $stmt = $db->prepare('INSERT INTO elected_officials (government_level, jurisdiction_name, municipality_id, name, first_name, last_name, role, email, source_url, source_name, confidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = COALESCE(NULLIF(VALUES(email), ""), email), role = VALUES(role), updated_at = NOW()');
+                $stmt->execute([$govLevel, $jurisdiction, $municipalityId, $name, $firstName, $lastName, $role, $email, '', 'seed_data', $confidence]);
+                $inserted++;
+            }
+        }
+
+        echo json_encode(['action' => 'import-seed', 'total' => count($data), 'inserted' => $inserted, 'updated' => $updated], JSON_PRETTY_PRINT);
+        break;
+
     case 'test-page':
         // Fetch a URL and show what the scraper sees
         $testUrl = $_GET['url'] ?? '';
