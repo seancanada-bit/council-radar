@@ -34,11 +34,11 @@ class RegionalDistrictScraper extends BaseScraper {
             'municipalities' => ['Cranbrook'],
         ],
         'Capital Regional District' => [
-            'url' => 'https://www.crd.ca/about/board-committees/board-directors',
+            'url' => 'https://www.crd.ca/government-administration/boards-committees/board-directors',
             'municipalities' => ['Colwood', 'Victoria'],
         ],
         'Regional District of Central Okanagan' => [
-            'url' => 'https://www.rdco.com/en/your-government/regional-board.aspx',
+            'url' => 'https://www.rdco.com/en/your-government/regional-board.aspx?_mid_=40801',
             'municipalities' => ['Kelowna'],
         ],
         'Regional District of Bulkley-Nechako' => [
@@ -46,28 +46,24 @@ class RegionalDistrictScraper extends BaseScraper {
             'municipalities' => ['Smithers', 'Houston'],
         ],
         'Cariboo Regional District' => [
-            'url' => 'https://www.cariboord.ca/en/regional-government/board-of-directors.aspx',
+            'url' => 'https://www.cariboord.ca/contacts-directory/',
             'municipalities' => ['Quesnel'],
         ],
         'Regional District of Kootenay Boundary' => [
-            'url' => 'https://www.rdkb.com/EN/main/government/board-of-directors.html',
+            'url' => 'https://rdkb.com/Regional-Government/Who-we-are-what-we-do/Board-of-Directors',
             'municipalities' => ['Trail'],
         ],
         'Columbia Shuswap Regional District' => [
-            'url' => 'https://www.csrd.bc.ca/board-directors',
+            'url' => 'https://www.csrd.bc.ca/344/Board-of-Directors',
             'municipalities' => ['Revelstoke'],
         ],
         'Regional District of Fraser-Fort George' => [
-            'url' => 'https://www.rdffg.bc.ca/regional-government/board-of-directors',
+            'url' => 'https://www.rdffg.ca/government/board-directors/members',
             'municipalities' => ['Mackenzie'],
         ],
         'Kitimat-Stikine Regional District' => [
-            'url' => 'https://www.rdks.bc.ca/content/board-directors',
+            'url' => 'https://www.rdks.bc.ca/government/board',
             'municipalities' => ['Stewart'],
-        ],
-        'Regional District of Mount Waddington' => [
-            'url' => 'https://www.rdmw.bc.ca/regional-government/board-directors',
-            'municipalities' => [],
         ],
     ];
 
@@ -161,6 +157,11 @@ class RegionalDistrictScraper extends BaseScraper {
             $directors = $this->parseLinkPattern($html);
         }
 
+        // Strategy 5: Email-based extraction (fallback)
+        if (empty($directors)) {
+            $directors = $this->parseFromEmails($html);
+        }
+
         // For all found directors, try to extract emails
         foreach ($directors as &$dir) {
             if (empty($dir['email'])) {
@@ -221,10 +222,19 @@ class RegionalDistrictScraper extends BaseScraper {
                 }
 
                 // Determine if electoral area or municipal director
-                $isElectoral = (bool) preg_match('/Electoral\s+Area/i', $area);
+                // Patterns: "Electoral Area X", "(A) Name Rural", "Area X"
+                $isElectoral = (bool) preg_match('/Electoral\s+Area|^\([A-Z]\)\s|^Area\s+[A-Z]/i', $area);
                 $role = $isElectoral ? 'Electoral Area Director' : 'Municipal Director';
 
+                // Clean "Director" or "Mayor" prefix from name
+                $name = preg_replace('/^(?:Director|Mayor|Councillor|Alternate)\s+/i', '', $name);
+
                 if ($this->isValidDirectorName($name)) {
+                    // Re-check role based on name prefix
+                    if (preg_match('/^Mayor\s/i', $cells[0] ?? '')) {
+                        $role = 'Municipal Director';
+                    }
+
                     $directors[] = [
                         'name' => $name,
                         'area' => $area,
@@ -387,12 +397,70 @@ class RegionalDistrictScraper extends BaseScraper {
     }
 
     /**
+     * Strategy 5: Email-based extraction
+     * Find all mailto links and extract names from nearby context
+     * Used when other strategies fail but the page has emails
+     */
+    private function parseFromEmails(string $html): array {
+        $directors = [];
+
+        if (!preg_match_all('/mailto:([^"\'>\s]+)/i', $html, $emailMatches, PREG_OFFSET_CAPTURE)) {
+            return [];
+        }
+
+        foreach ($emailMatches[1] as $em) {
+            $email = trim($em[0]);
+            $pos = $em[1];
+
+            // Skip generic emails
+            if (preg_match('/^(info|admin|general|inquiries|office|reception)@/i', $email)) continue;
+
+            // Look backwards 300 chars for a name
+            $before = substr($html, max(0, $pos - 300), min(300, $pos));
+            $beforeText = $this->stripHtml($before);
+
+            // Look for "Electoral Area X" near the email
+            $context = substr($html, max(0, $pos - 500), 1000);
+            $area = '';
+            $isElectoral = false;
+
+            if (preg_match('/Electoral\s+Area\s+([A-Z](?:\s*[-\/]\s*[A-Z])?)/i', $context, $am)) {
+                $area = "Electoral Area " . trim($am[1]);
+                $isElectoral = true;
+            } elseif (preg_match('/\(([A-Z])\)\s+[A-Za-z]/i', $context, $am)) {
+                $area = "Electoral Area " . $am[1];
+                $isElectoral = true;
+            }
+
+            // Find the closest person name before the email
+            $name = '';
+            if (preg_match_all('/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/', $beforeText, $names)) {
+                $name = end($names[1]); // Take the closest name
+            }
+
+            if ($name && $this->isValidDirectorName($name)) {
+                $role = $isElectoral ? 'Electoral Area Director' : 'Municipal Director';
+                $directors[] = [
+                    'name' => $name,
+                    'area' => $area ?: 'Unknown',
+                    'role' => $role,
+                    'email' => $email,
+                    'phone' => '',
+                    'is_electoral' => $isElectoral,
+                ];
+            }
+        }
+
+        return $directors;
+    }
+
+    /**
      * Validate a director name
      */
     private function isValidDirectorName(string $name): bool {
         if (strlen($name) < 4 || strlen($name) > 60) return false;
         if (str_word_count($name) < 2) return false;
-        if (preg_match('/^(Electoral|Regional|District|Board|City|Town|Village|Municipality)/i', $name)) return false;
+        if (preg_match('/^(Electoral|Regional|District|Board|City|Town|Village|Municipality|Agenda|Schedule|Chair|Vice)/i', $name)) return false;
         return true;
     }
 
