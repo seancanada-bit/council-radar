@@ -197,6 +197,54 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'test-page':
+        // Fetch a URL and show what the scraper sees
+        $testUrl = $_GET['url'] ?? '';
+        if (!$testUrl) {
+            echo json_encode(['error' => 'Provide ?url= parameter']);
+            break;
+        }
+        $ch = curl_init($testUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_USERAGENT => 'CouncilRadar/1.0 (councilradar.ca; municipal agenda monitoring)',
+            CURLOPT_HTTPHEADER => ['Accept: text/html'],
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // Extract key patterns
+        $h3Links = [];
+        if (preg_match_all('/<h[2-4][^>]*>\s*<a[^>]*>\s*([^<]+?)\s*<\/a>\s*<\/h[2-4]>\s*<p[^>]*>\s*([^<]+?)\s*<\/p>/si', $body ?: '', $m, PREG_SET_ORDER)) {
+            foreach ($m as $match) {
+                $h3Links[] = ['name' => trim($match[1]), 'desc' => trim($match[2])];
+            }
+        }
+
+        $strongNames = [];
+        if (preg_match_all('/<(?:strong|b)[^>]*>\s*([A-Z][a-z]+(?:\s+[A-Z]\'?[a-z]+)+)\s*<\/(?:strong|b)>/si', $body ?: '', $m)) {
+            $strongNames = $m[1];
+        }
+
+        $mailtos = [];
+        if (preg_match_all('/mailto:([^"\'>\s]+)/i', $body ?: '', $m)) {
+            $mailtos = $m[1];
+        }
+
+        echo json_encode([
+            'url' => $testUrl,
+            'http_code' => $code,
+            'body_length' => strlen($body ?: ''),
+            'h3_link_pairs' => $h3Links,
+            'strong_names' => $strongNames,
+            'mailtos' => $mailtos,
+            'body_sample' => $body ? substr(strip_tags($body), 0, 1000) : null,
+        ], JSON_PRETTY_PRINT);
+        break;
+
     default:
-        echo json_encode(['error' => 'Unknown action', 'available' => ['setup', 'run', 'results', 'test-civicinfo']]);
+        echo json_encode(['error' => 'Unknown action', 'available' => ['setup', 'run', 'results', 'test-civicinfo', 'test-page']]);
 }
