@@ -18,53 +18,91 @@ require_once __DIR__ . '/BaseScraper.php';
 
 class RegionalDistrictScraper extends BaseScraper {
 
-    // Board of directors page URLs for regional districts covering our 16 municipalities
-    // Format: 'RD Name' => ['url' => board page, 'municipalities' => covered municipalities]
+    // Board of directors page URLs for all BC regional districts
     private const REGIONAL_DISTRICTS = [
+        // === Our 16 monitored municipalities' RDs ===
         'Regional District of Nanaimo' => [
             'url' => 'https://rdn.bc.ca/regional-board',
-            'municipalities' => ['Parksville', 'Nanaimo'],
         ],
         'Thompson-Nicola Regional District' => [
             'url' => 'https://tnrd.civicweb.net/portal/members.aspx?id=25',
-            'municipalities' => ['Kamloops', 'Clearwater', 'Sun Peaks'],
         ],
         'Regional District of East Kootenay' => [
             'url' => 'https://www.rdek.bc.ca/about/board_of_directors',
-            'municipalities' => ['Cranbrook'],
         ],
         'Capital Regional District' => [
             'url' => 'https://www.crd.ca/government-administration/boards-committees/board-directors',
             'pages' => 3,
-            'municipalities' => ['Colwood', 'Victoria'],
         ],
         'Regional District of Central Okanagan' => [
             'url' => 'https://www.rdco.com/your-government/regional-board/',
-            'municipalities' => ['Kelowna'],
         ],
         'Regional District of Bulkley-Nechako' => [
             'url' => 'https://www.rdbn.bc.ca/departments/administration/board-of-directors',
-            'municipalities' => ['Smithers', 'Houston'],
         ],
         'Cariboo Regional District' => [
             'url' => 'https://www.cariboord.ca/contacts-directory/',
-            'municipalities' => ['Quesnel'],
         ],
         'Regional District of Kootenay Boundary' => [
             'url' => 'https://rdkb.com/Regional-Government/Who-we-are-what-we-do/Board-of-Directors',
-            'municipalities' => ['Trail'],
         ],
         'Columbia Shuswap Regional District' => [
             'url' => 'https://www.csrd.bc.ca/344/Board-of-Directors',
-            'municipalities' => ['Revelstoke'],
         ],
         'Regional District of Fraser-Fort George' => [
             'url' => 'https://www.rdffg.ca/government/board-directors/members',
-            'municipalities' => ['Mackenzie'],
         ],
         'Kitimat-Stikine Regional District' => [
             'url' => 'https://www.rdks.bc.ca/government/board',
-            'municipalities' => ['Stewart'],
+        ],
+        // === Additional BC regional districts ===
+        'Alberni-Clayoquot Regional District' => [
+            'url' => 'https://www.acrd.bc.ca/district-board-members',
+        ],
+        'Central Coast Regional District' => [
+            'url' => 'https://www.ccrd.ca/governance/board-of-directors/',
+        ],
+        'Regional District of Central Kootenay' => [
+            'url' => 'https://www.rdck.ca/government/board/',
+        ],
+        'Comox Valley Regional District' => [
+            'url' => 'https://www.comoxvalleyrd.ca/about/board-directors/board-members-structure',
+        ],
+        'Cowichan Valley Regional District' => [
+            'url' => 'https://cvrd.ca/government-administration/boards-committees/board-of-directors/',
+        ],
+        'Fraser Valley Regional District' => [
+            'url' => 'https://www.fvrd.ca/EN/main/government/board-of-directors.html',
+        ],
+        'Metro Vancouver' => [
+            'url' => 'https://metrovancouver.org/boards/board-members',
+        ],
+        'Regional District of Mount Waddington' => [
+            'url' => 'https://www.rdmw.bc.ca/contact-us/contact-us-rdmw-board',
+        ],
+        'North Coast Regional District' => [
+            'url' => 'https://www.ncrdbc.com/governance/our-board/directors',
+        ],
+        'Regional District of North Okanagan' => [
+            'url' => 'https://www.rdno.ca/government-administration/board-directors',
+        ],
+        'Regional District of Okanagan-Similkameen' => [
+            'url' => 'https://www.rdos.bc.ca/regional-government/board-members/',
+        ],
+        'Peace River Regional District' => [
+            'url' => 'https://www.prrd.bc.ca/our-government/board/directors/',
+        ],
+        'qathet Regional District' => [
+            'url' => 'https://www.qathet.ca/about/board-of-directors/',
+        ],
+        'Squamish-Lillooet Regional District' => [
+            'url' => 'https://www.slrd.bc.ca/about-us/regional-district-board',
+        ],
+        'Strathcona Regional District' => [
+            'url' => 'https://srd.ca/government/board-of-directors/',
+        ],
+        'Sunshine Coast Regional District' => [
+            'url' => 'https://www.scrd.ca/our-board/',
         ],
     ];
 
