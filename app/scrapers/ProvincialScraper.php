@@ -192,43 +192,136 @@ class ProvincialScraper extends BaseScraper {
 
     /**
      * Normalize a name for comparison
-     * Lowercase, remove punctuation, collapse whitespace
+     * Strips accents, Indigenous name prefixes, punctuation, and collapses whitespace
+     * "Á'a:líya Warbus" -> "aaliya warbus"
+     * "Laanas - Tamara Davidson" -> "tamara davidson"
+     * "Claire Rattée" -> "claire rattee"
+     * "Misty Van Popta" -> "misty van popta"
      */
     private function normalizeName(string $name): string {
         $name = mb_strtolower($name);
         $name = $this->cleanMlaName($name);
-        $name = preg_replace('/[^a-z\s-]/', '', $name);
+        // Remove Indigenous ceremonial name prefix (before the dash separator)
+        // e.g. "laanas - tamara davidson" -> "tamara davidson"
+        if (preg_match('/^[\w\x{00C0}-\x{024F}\':]+\s*-\s*(.+)$/u', $name, $m)) {
+            $name = $m[1];
+        }
+        // Transliterate accented characters to ASCII
+        // é->e, á->a, í->i, etc.
+        if (function_exists('transliterator_transliterate')) {
+            $name = transliterator_transliterate('Any-Latin; Latin-ASCII; Lower()', $name);
+        } else {
+            $name = strtr($name, [
+                'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e',
+                'á' => 'a', 'à' => 'a', 'â' => 'a', 'ä' => 'a', 'ã' => 'a',
+                'í' => 'i', 'ì' => 'i', 'î' => 'i', 'ï' => 'i',
+                'ó' => 'o', 'ò' => 'o', 'ô' => 'o', 'ö' => 'o', 'õ' => 'o',
+                'ú' => 'u', 'ù' => 'u', 'û' => 'u', 'ü' => 'u',
+                'ñ' => 'n', 'ç' => 'c',
+            ]);
+        }
+        // Remove non-alpha except spaces
+        $name = preg_replace('/[^a-z\s]/', '', $name);
         $name = preg_replace('/\s+/', ' ', $name);
         return trim($name);
     }
 
     /**
+     * Extract the "civil name" portion for matching
+     * For names like "Laanas - Tamara Davidson", returns "Tamara Davidson"
+     * For normal names, returns as-is
+     */
+    private function getCivilName(string $name): string {
+        $name = $this->cleanMlaName($name);
+        if (preg_match('/^.+\s*-\s*(.+)$/u', $name, $m)) {
+            return trim($m[1]);
+        }
+        return $name;
+    }
+
+    /**
      * Merge leg.bc.ca email data into Represent API data
-     * Match by normalized name
+     * Multiple matching strategies for robustness
      */
     private function mergeData(array $representData, array $legContacts): array {
-        // Build lookup from leg.bc.ca by normalized name
-        $legByName = [];
-        foreach ($legContacts as $contact) {
-            $normalized = $this->normalizeName($contact['name']);
-            $legByName[$normalized] = $contact;
+        // Build multiple lookup indexes from leg.bc.ca
+        $legByNorm = [];       // normalized full name
+        $legByEmail = [];      // email address
+        $legByCivil = [];      // civil name (without Indigenous prefix)
+        $legByLastFirst = [];  // last_firstinitial
 
-            // Also index by last name + first initial for fuzzy matching
-            $parts = explode(' ', $normalized);
+        foreach ($legContacts as $contact) {
+            $norm = $this->normalizeName($contact['name']);
+            $legByNorm[$norm] = $contact;
+
+            $civil = $this->normalizeName($this->getCivilName($contact['name']));
+            $legByCivil[$civil] = $contact;
+
+            if (!empty($contact['email'])) {
+                $legByEmail[strtolower($contact['email'])] = $contact;
+            }
+
+            // Index by last word + first char
+            $parts = explode(' ', $norm);
             if (count($parts) >= 2) {
-                $lastName = end($parts);
-                $firstName = $parts[0];
-                $legByName[$lastName . '_' . substr($firstName, 0, 1)] = $contact;
+                $key = end($parts) . '_' . substr($parts[0], 0, 1);
+                $legByLastFirst[$key] = $contact;
             }
         }
 
         $merged = 0;
+        $unmatched = [];
+
         foreach ($representData as &$mla) {
-            $normalized = $this->normalizeName($mla['name']);
+            $matched = false;
+            $legEntry = null;
 
-            // Exact normalized match
-            if (isset($legByName[$normalized])) {
-                $legEntry = $legByName[$normalized];
+            // Strategy 1: Exact normalized name
+            $norm = $this->normalizeName($mla['name']);
+            if (isset($legByNorm[$norm])) {
+                $legEntry = $legByNorm[$norm];
+                $matched = true;
+            }
+
+            // Strategy 2: Civil name match (strips Indigenous prefix)
+            if (!$matched) {
+                $civil = $this->normalizeName($this->getCivilName($mla['name']));
+                if (isset($legByCivil[$civil])) {
+                    $legEntry = $legByCivil[$civil];
+                    $matched = true;
+                }
+            }
+
+            // Strategy 3: Last name + first initial
+            if (!$matched) {
+                $lastName = $this->normalizeName($mla['last_name']);
+                $firstInit = strtolower(substr($mla['first_name'], 0, 1));
+                $key = $lastName . '_' . $firstInit;
+                if (isset($legByLastFirst[$key])) {
+                    $legEntry = $legByLastFirst[$key];
+                    $matched = true;
+                }
+            }
+
+            // Strategy 4: Match by email address
+            if (!$matched && !empty($mla['email'])) {
+                $emailLower = strtolower($mla['email']);
+                if (isset($legByEmail[$emailLower])) {
+                    $legEntry = $legByEmail[$emailLower];
+                    $matched = true;
+                }
+            }
+
+            // Strategy 5: Build expected email pattern and search
+            if (!$matched) {
+                $expectedEmail = strtolower($mla['first_name'] . '.' . $mla['last_name'] . '.MLA@leg.bc.ca');
+                if (isset($legByEmail[$expectedEmail])) {
+                    $legEntry = $legByEmail[$expectedEmail];
+                    $matched = true;
+                }
+            }
+
+            if ($matched && $legEntry) {
                 if (!empty($legEntry['email'])) {
                     $mla['email'] = $legEntry['email'];
                 }
@@ -237,44 +330,16 @@ class ProvincialScraper extends BaseScraper {
                 }
                 $mla['_leg_matched'] = true;
                 $merged++;
-                continue;
-            }
-
-            // Try last name + first initial
-            $lastName = strtolower($mla['last_name']);
-            $firstInitial = strtolower(substr($mla['first_name'], 0, 1));
-            $fuzzyKey = $lastName . '_' . $firstInitial;
-
-            if (isset($legByName[$fuzzyKey])) {
-                $legEntry = $legByName[$fuzzyKey];
-                if (!empty($legEntry['email'])) {
-                    $mla['email'] = $legEntry['email'];
-                }
-                if (!empty($legEntry['profile_url'])) {
-                    $mla['profile_url'] = $legEntry['profile_url'];
-                }
-                $mla['_leg_matched'] = true;
-                $merged++;
-                continue;
-            }
-
-            // Try matching by email pattern (firstname.lastname.MLA@leg.bc.ca)
-            $expectedEmail = strtolower($mla['first_name'] . '.' . $mla['last_name'] . '.MLA@leg.bc.ca');
-            foreach ($legContacts as $contact) {
-                if (strtolower($contact['email']) === $expectedEmail) {
-                    $mla['email'] = $contact['email'];
-                    if (!empty($contact['profile_url'])) {
-                        $mla['profile_url'] = $contact['profile_url'];
-                    }
-                    $mla['_leg_matched'] = true;
-                    $merged++;
-                    break;
-                }
+            } else {
+                $unmatched[] = $mla['name'];
             }
         }
         unset($mla);
 
         $this->writeLog("Merged {$merged} of " . count($representData) . " MLAs with leg.bc.ca data");
+        if (!empty($unmatched)) {
+            $this->writeLog("Unmatched: " . implode(', ', $unmatched));
+        }
         return $representData;
     }
 
