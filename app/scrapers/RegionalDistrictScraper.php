@@ -166,7 +166,13 @@ class RegionalDistrictScraper extends BaseScraper {
             $directors = $this->parseLinkPattern($html);
         }
 
-        // Strategy 5: Email-based extraction (fallback)
+        // Strategy 5: h3 link + p description pattern (CRD style)
+        // <h3><a href="...">Name</a></h3><p>Area (Role)</p>
+        if (empty($directors)) {
+            $directors = $this->parseH3LinkPattern($html);
+        }
+
+        // Strategy 6: Email-based extraction (fallback)
         if (empty($directors)) {
             $directors = $this->parseFromEmails($html);
         }
@@ -406,7 +412,52 @@ class RegionalDistrictScraper extends BaseScraper {
     }
 
     /**
-     * Strategy 5: Email-based extraction
+     * Strategy 5: <h3><a>Name</a></h3><p>Area (Role)</p> pattern (CRD style)
+     */
+    private function parseH3LinkPattern(string $html): array {
+        $directors = [];
+
+        // Match: <h3><a href="...">Name</a></h3> followed by <p>Area (Role)</p>
+        $pattern = '/<h[2-4][^>]*>\s*<a[^>]*>\s*([^<]+?)\s*<\/a>\s*<\/h[2-4]>\s*<p[^>]*>\s*([^<]+?)\s*<\/p>/si';
+
+        if (preg_match_all($pattern, $html, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $name = trim($this->stripHtml($m[1]));
+                $areaLine = trim($this->stripHtml($m[2]));
+
+                if (!$this->isValidDirectorName($name)) continue;
+
+                // Parse "Area (Role)" - e.g. "Sidney (CRD Chair)" or "Southern Gulf Islands (Director)"
+                $area = $areaLine;
+                $extraRole = '';
+                if (preg_match('/^(.+?)\s*\(([^)]+)\)\s*$/', $areaLine, $ap)) {
+                    $area = trim($ap[1]);
+                    $extraRole = trim($ap[2]);
+                }
+
+                // Known CRD electoral areas
+                $crdElectoralAreas = ['Southern Gulf Islands', 'Salt Spring Island', 'Juan de Fuca'];
+                $isElectoral = in_array($area, $crdElectoralAreas)
+                    || (bool) preg_match('/Electoral\s+Area|electoral/i', $area);
+
+                $role = $isElectoral ? 'Electoral Area Director' : 'Municipal Director';
+
+                $directors[] = [
+                    'name' => $name,
+                    'area' => $area,
+                    'role' => $role,
+                    'email' => '',
+                    'phone' => '',
+                    'is_electoral' => $isElectoral,
+                ];
+            }
+        }
+
+        return $directors;
+    }
+
+    /**
+     * Strategy 6: Email-based extraction
      * Find all mailto links and extract names from nearby context
      * Used when other strategies fail but the page has emails
      */

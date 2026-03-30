@@ -31,6 +31,9 @@ class LocalGovScraper extends BaseScraper {
         'Nanaimo' => 'https://www.nanaimo.ca/your-government/city-council/contact-mayor-and-council',
         'Victoria' => 'https://www.victoria.ca/city-government/mayor-council/members-council',
         'Kelowna' => 'https://www.kelowna.ca/city-hall/contact-us/general-inquiries-15',
+        'Mackenzie' => 'https://districtofmackenzie.ca/government-town-hall/council/',
+        'Stewart' => 'https://districtofstewart.com/district-hall/mayors-office/contact',
+        'Houston' => 'https://www.houston.ca/contact',
     ];
 
     private string $logFile;
@@ -221,18 +224,37 @@ class LocalGovScraper extends BaseScraper {
 
         // Strategy 2b: <strong>Name</strong> followed by nearby mailto (Nanaimo style)
         // No Mayor/Councillor prefix required - just bold name + email
+        // Tracks used emails to prevent one email being assigned to multiple names
         if (empty($contacts)) {
+            $usedEmails = [];
             if (preg_match_all('/<(?:strong|b)[^>]*>\s*([A-Z][a-z]+(?:\s+[A-Z]\'?[a-z]+)+)\s*<\/(?:strong|b)>/si', $html, $boldNames, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
                 foreach ($boldNames as $bn) {
                     $name = trim($this->stripHtml($bn[1][0]));
                     $offset = $bn[0][1];
 
-                    // Look for mailto within 400 chars after the bold name
-                    $after = substr($html, $offset, 400);
+                    // Look for the CLOSEST mailto after the bold name
+                    // But stop if we hit another bold name first (to avoid crossing into next person)
+                    $after = substr($html, $offset + strlen($bn[0][0]), 500);
+
+                    // Truncate at the next <strong> or <b> to avoid crossing boundaries
+                    if (preg_match('/<(?:strong|b)[^>]*>/i', $after, $nextBold, PREG_OFFSET_CAPTURE)) {
+                        $after = substr($after, 0, $nextBold[0][1]);
+                    }
+
+                    $email = '';
                     if (preg_match('/mailto:([^"\'>\s]+)/i', $after, $em)) {
                         $email = trim($em[1]);
-                        if ($this->isValidContact($name, $email)) {
-                            // Detect role from context before the name
+                    }
+                    // Check for reversed email text (Mackenzie style spam protection)
+                    if (!$email) {
+                        if (preg_match('/([a-z]{2}\.[a-z.]+@[a-z]+)/i', $after, $rev)) {
+                            $decoded = $this->decodeReversedEmail($rev[1]);
+                            if ($decoded) $email = $decoded;
+                        }
+                    }
+                    if ($email) {
+                        if (!isset($usedEmails[$email]) && $this->isValidContact($name, $email)) {
+                            $usedEmails[$email] = true;
                             $before = substr($html, max(0, $offset - 200), 200);
                             $role = (stripos($before, 'mayor') !== false || stripos($after, 'mayor') !== false) ? 'Mayor' : 'Councillor';
                             $phone = '';
@@ -357,6 +379,20 @@ class LocalGovScraper extends BaseScraper {
         // Must have at least two words (first + last)
         if (str_word_count($name) < 2) return false;
         return true;
+    }
+
+    /**
+     * Decode reversed/obfuscated email addresses
+     * Some municipalities reverse emails as spam protection
+     * e.g. "ac.eiznekcamfotcirtsid@naoj" -> "joan@districtofmackenzie.ca"
+     */
+    private function decodeReversedEmail(string $text): ?string {
+        // Check if it looks like a reversed email (has @ and ends with known reversed TLDs)
+        $reversed = strrev($text);
+        if (filter_var($reversed, FILTER_VALIDATE_EMAIL)) {
+            return $reversed;
+        }
+        return null;
     }
 
     /**
