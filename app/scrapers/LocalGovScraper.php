@@ -1,37 +1,42 @@
 <?php
 /**
- * Scraper for BC Local Government elected officials
+ * Scraper for BC Local Government elected officials (mayors, councillors)
  *
- * Sources:
- *   1. CivicInfo BC (civicinfo.bc.ca) — municipalities + regional districts
- *   2. Represent API (represent.opennorth.ca) — partial coverage (~13 councils) for verification
+ * Strategy:
+ *   1. Represent API (represent.opennorth.ca) - bulk source for 877+ BC municipal officials
+ *      Has names, roles, phone numbers, but no emails
+ *   2. Municipal website council pages - scraped for email addresses
+ *      Each municipality has a different URL structure, configured in COUNCIL_PAGES
  *
- * CivicInfo BC structure:
- *   /municipalities?id={0-160}     — org page with elected officials table
- *   /regionaldistricts?id={0-27}   — same format for RDs
- *   /people?id={XXXX}              — individual contact page with email/phone
- *
- * CivicInfo blocks plain HTTP requests (403), so we set browser-like headers.
- * Rate limiting: 3-second delay, batched in chunks of 50 with 30s pauses.
+ * CivicInfo BC is Cloudflare-protected and inaccessible from server-side PHP.
  */
 
 require_once __DIR__ . '/BaseScraper.php';
 
 class LocalGovScraper extends BaseScraper {
 
-    private const CIVICINFO_BASE = 'https://www.civicinfo.bc.ca';
-    private const REPRESENT_MUNICIPAL_URL = 'https://represent.opennorth.ca/representatives/british-columbia-municipal-councils/?limit=1000&format=json';
+    private const REPRESENT_API_URL = 'https://represent.opennorth.ca/representatives/british-columbia-municipal-councils/?limit=1000&format=json';
 
-    // Increased delay for CivicInfo BC
-    private const CIVICINFO_DELAY = 3;
-    private const BATCH_SIZE = 50;
-    private const BATCH_PAUSE = 30;
+    // Council contact page URLs for our monitored municipalities
+    // These pages contain individual email addresses and phone numbers
+    private const COUNCIL_PAGES = [
+        'Parksville' => 'http://www.parksville.ca/cms.asp?wpID=80',
+        'Kamloops' => 'https://www.kamloops.ca/city-hall/city-council/council-contact-information-bios',
+        'Cranbrook' => 'https://www.cranbrook.ca/city-government/mayor-and-council',
+        'Colwood' => 'https://www.colwood.ca/government/mayor-council',
+        'Smithers' => 'https://www.smithers.ca/mayor-and-council',
+        'Quesnel' => 'https://www.quesnel.ca/city-hall/mayor-council',
+        'Trail' => 'https://www.trail.ca/en/city-hall/mayor-and-council.aspx',
+        'Revelstoke' => 'https://www.revelstoke.ca/government/mayor-council',
+        'Nanaimo' => 'https://www.nanaimo.ca/your-government/city-council/contact-mayor-and-council',
+        'Victoria' => 'https://www.victoria.ca/government/mayor-council',
+        'Kelowna' => 'https://www.kelowna.ca/city-hall/contact-us/general-inquiries-15',
+    ];
 
     private string $logFile;
     private int $officialsFound = 0;
     private int $officialsInserted = 0;
     private int $officialsUpdated = 0;
-    private int $requestCount = 0;
 
     public function __construct() {
         parent::__construct();
@@ -43,25 +48,23 @@ class LocalGovScraper extends BaseScraper {
         $this->writeLog("Starting local government officials scrape");
 
         try {
-            // Step 1: Fetch Represent API data for verification later
+            // Step 1: Bulk fetch from Represent API
             $representData = $this->fetchRepresentAPI();
-            $this->writeLog("Represent API: " . count($representData) . " municipal officials loaded for verification");
+            $this->writeLog("Represent API: " . count($representData) . " BC municipal officials loaded");
 
-            // Step 2: Scrape CivicInfo BC municipalities
-            $this->writeLog("Scraping CivicInfo BC municipalities...");
-            $this->scrapeCivicInfoSection('municipalities', 'municipal', 161);
+            // Step 2: Upsert all Represent API officials
+            foreach ($representData as $official) {
+                $this->upsertOfficial($official, 'represent_api');
+            }
+            $this->writeLog("Upserted {$this->officialsInserted} new, {$this->officialsUpdated} updated from Represent API");
 
-            // Step 3: Scrape CivicInfo BC regional districts
-            $this->writeLog("Scraping CivicInfo BC regional districts...");
-            $this->scrapeCivicInfoSection('regionaldistricts', 'regional_district', 28);
-
-            // Step 4: Cross-reference with Represent API
-            $this->crossReferenceWithRepresent($representData);
+            // Step 3: Scrape municipal websites for emails
+            $emailsFound = $this->scrapeCouncilPages();
+            $this->writeLog("Council page scraping: {$emailsFound} emails found/updated");
 
             $durationMs = (int) ((microtime(true) - $startTime) * 1000);
-            $this->logOfficialsScrape('civicinfo_bc', 'municipal', 'success', $durationMs);
-
-            $this->writeLog("Complete: {$this->officialsFound} found, {$this->officialsInserted} inserted, {$this->officialsUpdated} updated ({$durationMs}ms, {$this->requestCount} requests)");
+            $this->logOfficialsScrape('localgov_combined', 'municipal', 'success', $durationMs);
+            $this->writeLog("Complete: {$this->officialsFound} found, {$this->officialsInserted} inserted, {$this->officialsUpdated} updated ({$durationMs}ms)");
 
             return [
                 'officials_found' => $this->officialsFound,
@@ -71,7 +74,7 @@ class LocalGovScraper extends BaseScraper {
 
         } catch (\Exception $e) {
             $durationMs = (int) ((microtime(true) - $startTime) * 1000);
-            $this->logOfficialsScrape('civicinfo_bc', 'municipal', 'error', $durationMs, $e->getMessage());
+            $this->logOfficialsScrape('localgov_combined', 'municipal', 'error', $durationMs, $e->getMessage());
             $this->writeLog("ERROR: " . $e->getMessage());
             throw $e;
         }
@@ -82,372 +85,411 @@ class LocalGovScraper extends BaseScraper {
     }
 
     /**
-     * Scrape a section of CivicInfo BC (municipalities or regional districts)
+     * Fetch all BC municipal officials from Represent API
      */
-    private function scrapeCivicInfoSection(string $section, string $govLevel, int $maxId): void {
-        $batchCount = 0;
+    private function fetchRepresentAPI(): array {
+        $this->writeLog("Fetching Represent API...");
+        $url = self::REPRESENT_API_URL;
+        $allOfficials = [];
 
-        for ($id = 0; $id < $maxId; $id++) {
-            // Batch pausing
-            if ($batchCount >= self::BATCH_SIZE) {
-                $this->writeLog("  Batch pause ({$id}/{$maxId})...");
-                sleep(self::BATCH_PAUSE);
-                $batchCount = 0;
-            }
-
-            sleep(self::CIVICINFO_DELAY);
-            $url = self::CIVICINFO_BASE . "/{$section}?id={$id}";
-            $result = $this->fetchCivicInfo($url);
-
+        // Represent API paginates - follow next links
+        while ($url) {
+            $result = $this->fetch($url);
             if ($result['error']) {
-                if ($result['code'] === 404) continue; // ID doesn't exist
-                if ($result['code'] === 429 || $result['code'] === 403) {
-                    $this->writeLog("  Rate limited at id={$id}, backing off 60s...");
-                    sleep(60);
-                    // Retry once
-                    $result = $this->fetchCivicInfo($url);
-                    if ($result['error']) {
-                        $this->writeLog("  Still blocked at id={$id}, skipping");
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
+                $this->writeLog("Represent API error: " . $result['error']);
+                break;
             }
 
-            $this->requestCount++;
-            $batchCount++;
+            $json = json_decode($result['body'], true);
+            if (!$json || !isset($json['objects'])) break;
 
-            // Parse the org page
-            $orgData = $this->parseOrgPage($result['body'], $section);
-            if (!$orgData || empty($orgData['officials'])) continue;
+            foreach ($json['objects'] as $obj) {
+                $name = trim($obj['name'] ?? '');
+                if (!$name) continue;
 
-            $this->writeLog("  {$orgData['name']}: " . count($orgData['officials']) . " officials");
-
-            // Link to existing municipality if we have it
-            $municipalityId = $this->findMunicipalityId($orgData['name']);
-
-            // Fetch individual person pages for contact details
-            foreach ($orgData['officials'] as &$official) {
-                if (!empty($official['person_url'])) {
-                    sleep(self::CIVICINFO_DELAY);
-                    $personResult = $this->fetchCivicInfo(self::CIVICINFO_BASE . $official['person_url']);
-                    $this->requestCount++;
-                    $batchCount++;
-
-                    if (!$personResult['error']) {
-                        $personData = $this->parsePersonPage($personResult['body']);
-                        $official = array_merge($official, $personData);
-                    }
-                }
-
-                // Upsert the official
-                $this->upsertOfficial($official, $orgData['name'], $govLevel, $municipalityId);
+                $allOfficials[] = [
+                    'name' => $name,
+                    'first_name' => trim($obj['first_name'] ?? ''),
+                    'last_name' => trim($obj['last_name'] ?? ''),
+                    'jurisdiction' => trim($obj['district_name'] ?? ''),
+                    'role' => trim($obj['elected_office'] ?? 'Councillor'),
+                    'email' => trim($obj['email'] ?? ''),
+                    'phone' => $this->cleanPhone(trim($obj['offices'][0]['tel'] ?? '')),
+                    'photo_url' => trim($obj['photo_url'] ?? ''),
+                    'source_url' => trim($obj['source_url'] ?? self::REPRESENT_API_URL),
+                ];
             }
+
+            // Check for next page
+            $url = $json['meta']['next'] ?? null;
+            if ($url && strpos($url, 'http') !== 0) {
+                $url = 'https://represent.opennorth.ca' . $url;
+            }
+
+            $this->rateLimit();
         }
+
+        $this->officialsFound = count($allOfficials);
+        return $allOfficials;
     }
 
     /**
-     * Fetch a CivicInfo BC page with browser-like headers
+     * Scrape individual municipal council pages for email addresses
      */
-    private function fetchCivicInfo(string $url): array {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 5,
-            CURLOPT_TIMEOUT => $this->timeout,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_ENCODING => '',
-            CURLOPT_HTTPHEADER => [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language: en-CA,en-US;q=0.9,en;q=0.8',
-                'Cache-Control: no-cache',
-                'Connection: keep-alive',
-                'Referer: https://www.civicinfo.bc.ca/',
-            ],
-            CURLOPT_COOKIEFILE => '', // enable cookie engine
-        ]);
+    private function scrapeCouncilPages(): int {
+        $emailsFound = 0;
 
-        $body = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
+        foreach (self::COUNCIL_PAGES as $municipality => $url) {
+            $this->writeLog("  Scraping council page: {$municipality}");
+            $this->rateLimit();
 
-        if ($body === false) {
-            return ['body' => '', 'code' => 0, 'error' => $error ?: 'cURL request failed'];
-        }
-        if ($code >= 400) {
-            return ['body' => $body, 'code' => $code, 'error' => "HTTP {$code}"];
+            $result = $this->fetch($url);
+            if ($result['error']) {
+                $this->writeLog("  Failed: " . $result['error']);
+                continue;
+            }
+
+            $contacts = $this->parseCouncilPage($result['body'], $municipality);
+            $this->writeLog("  {$municipality}: " . count($contacts) . " contacts found");
+
+            foreach ($contacts as $contact) {
+                if (empty($contact['email'])) continue;
+
+                // Try to match to an existing official in the DB
+                $matched = $this->matchAndUpdateEmail($contact, $municipality);
+                if ($matched) {
+                    $emailsFound++;
+                }
+            }
         }
 
-        return ['body' => $body, 'code' => $code, 'error' => null];
+        return $emailsFound;
     }
 
     /**
-     * Parse a CivicInfo BC organization page for elected officials
+     * Parse a council contact page for names and emails
+     * Uses multiple strategies since each municipality has different HTML
      */
-    private function parseOrgPage(string $html, string $section): ?array {
-        $data = ['name' => '', 'officials' => []];
+    private function parseCouncilPage(string $html, string $municipality): array {
+        $contacts = [];
 
-        // Extract organization name from <h1> or <title>
-        if (preg_match('/<h1[^>]*>(.*?)<\/h1>/si', $html, $h1)) {
-            $data['name'] = trim($this->stripHtml($h1[1]));
-        } elseif (preg_match('/<title>(.*?)(?:\s*[-|])/i', $html, $title)) {
-            $data['name'] = trim($this->stripHtml($title[1]));
+        // Strategy 1: Find mailto links near person names
+        // Most council pages have patterns like:
+        //   <a href="mailto:email@city.ca">email@city.ca</a>
+        //   near a name in a heading, bold text, or table cell
+
+        // Extract all emails from the page
+        $emails = [];
+        if (preg_match_all('/mailto:([^"\'>\s]+)/i', $html, $emailMatches)) {
+            $emails = array_unique($emailMatches[1]);
         }
 
-        if (!$data['name']) return null;
+        // Extract all person-like names near titles like Mayor, Councillor, Council
+        // Look for patterns: "Mayor Name", "Councillor Name", or names in headings near emails
+        $namePatterns = [
+            '/(?:Mayor|Councillor|Councilor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i',
+            '/<(?:h[1-6]|strong|b)[^>]*>\s*(?:Mayor|Councillor|Councilor)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*<\/(?:h[1-6]|strong|b)>/i',
+        ];
 
-        // Find the Elected Officials section/table
-        // CivicInfo pages typically have a heading "Elected Officials" followed by a table
-        $electedSection = '';
-        if (preg_match('/Elected\s+Officials.*?(<table[^>]*>.*?<\/table>)/si', $html, $tableMatch)) {
-            $electedSection = $tableMatch[1];
-        } elseif (preg_match('/<table[^>]*class="[^"]*elected[^"]*"[^>]*>.*?<\/table>/si', $html, $tableMatch)) {
-            $electedSection = $tableMatch[0];
+        $names = [];
+        foreach ($namePatterns as $pattern) {
+            if (preg_match_all($pattern, $html, $nameMatches)) {
+                foreach ($nameMatches[1] as $name) {
+                    $name = trim($name);
+                    if (strlen($name) > 4 && strlen($name) < 60) {
+                        $names[] = $name;
+                    }
+                }
+            }
         }
 
-        if ($electedSection) {
-            preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $electedSection, $rows);
+        // Match names to emails by proximity in HTML or by name-email pattern
+        foreach ($emails as $email) {
+            // Skip generic emails
+            $emailLower = strtolower($email);
+            if (preg_match('/^(info|admin|city|council|clerk|reception|general)@/i', $email)) continue;
+
+            // Try to find a name associated with this email
+            $associatedName = $this->findNameNearEmail($html, $email, $names);
+
+            if ($associatedName) {
+                $role = $this->detectRoleFromContext($html, $associatedName, $email);
+                $phone = $this->findPhoneNearName($html, $associatedName);
+
+                $contacts[] = [
+                    'name' => $associatedName,
+                    'email' => $email,
+                    'phone' => $phone,
+                    'role' => $role,
+                ];
+            }
+        }
+
+        // Fallback: if we found emails but no name matches, try table parsing
+        if (empty($contacts)) {
+            $contacts = $this->parseCouncilTable($html);
+        }
+
+        return $contacts;
+    }
+
+    /**
+     * Find a person name near an email address in the HTML
+     */
+    private function findNameNearEmail(string $html, string $email, array $knownNames): ?string {
+        $emailPos = strpos($html, $email);
+        if ($emailPos === false) return null;
+
+        // Look in a 500 char window around the email
+        $start = max(0, $emailPos - 500);
+        $context = substr($html, $start, 1000);
+        $contextText = $this->stripHtml($context);
+
+        // Check if any known name appears near this email
+        foreach ($knownNames as $name) {
+            if (stripos($contextText, $name) !== false) {
+                return $name;
+            }
+        }
+
+        // Try to extract a name from the email address itself
+        // e.g., CouncillorBeil@parksville.ca -> look for "Beil" in known names
+        if (preg_match('/(?:councillor|mayor)?([a-z]+)@/i', $email, $m)) {
+            $emailName = $m[1];
+            foreach ($knownNames as $name) {
+                if (stripos($name, $emailName) !== false) {
+                    return $name;
+                }
+            }
+        }
+
+        // Try to find a capitalized name in the context
+        if (preg_match('/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/', $contextText, $m)) {
+            $candidate = trim($m[1]);
+            if (strlen($candidate) > 4 && strlen($candidate) < 60) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Detect if someone is Mayor or Councillor from surrounding HTML context
+     */
+    private function detectRoleFromContext(string $html, string $name, string $email): string {
+        $pos = strpos($html, $name) ?: strpos($html, $email);
+        if ($pos === false) return 'Councillor';
+
+        $start = max(0, $pos - 200);
+        $context = strtolower(substr($html, $start, 400 + strlen($name)));
+
+        if (strpos($context, 'mayor') !== false) return 'Mayor';
+        return 'Councillor';
+    }
+
+    /**
+     * Find a phone number near a person's name in the HTML
+     */
+    private function findPhoneNearName(string $html, string $name): string {
+        $pos = strpos($html, $name);
+        if ($pos === false) return '';
+
+        $context = substr($html, $pos, 500);
+        if (preg_match('/(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/', $context, $m)) {
+            return $this->cleanPhone($m[1]);
+        }
+        return '';
+    }
+
+    /**
+     * Parse a council page that uses a table format
+     */
+    private function parseCouncilTable(string $html): array {
+        $contacts = [];
+
+        if (preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $html, $rows)) {
             foreach ($rows[1] as $row) {
                 if (strpos($row, '<th') !== false) continue;
 
-                preg_match_all('/<td[^>]*>(.*?)<\/td>/si', $row, $cells);
-                if (count($cells[1]) < 2) continue;
-
-                $nameCell = $cells[1][0];
-                $roleCell = $cells[1][1] ?? '';
-
-                // Extract name and person link
-                $personUrl = '';
-                if (preg_match('/href="([^"]*people[^"]*)"/i', $nameCell, $linkMatch)) {
-                    $personUrl = $linkMatch[1];
+                $email = '';
+                if (preg_match('/mailto:([^"\'>\s]+)/i', $row, $em)) {
+                    $email = trim($em[1]);
+                    if (preg_match('/^(info|admin|city|council|clerk)@/i', $email)) continue;
                 }
 
-                $name = trim($this->stripHtml($nameCell));
-                $role = trim($this->stripHtml($roleCell));
-
-                if ($name) {
-                    $data['officials'][] = [
-                        'name' => $name,
-                        'role' => $role ?: $this->inferRole($section),
-                        'person_url' => $personUrl,
-                        'email' => '',
-                        'phone' => '',
-                    ];
-                    $this->officialsFound++;
+                $name = '';
+                $cells = [];
+                if (preg_match_all('/<td[^>]*>(.*?)<\/td>/si', $row, $cellMatches)) {
+                    $cells = $cellMatches[1];
                 }
-            }
-        }
+                if (!empty($cells)) {
+                    $name = trim($this->stripHtml($cells[0]));
+                }
 
-        // Fallback: look for officials in list/div format (some pages use <ul> instead of tables)
-        if (empty($data['officials'])) {
-            if (preg_match_all('/<a[^>]*href="([^"]*people\?id=\d+)"[^>]*>(.*?)<\/a>/si', $html, $links, PREG_SET_ORDER)) {
-                foreach ($links as $link) {
-                    $name = trim($this->stripHtml($link[2]));
-                    if ($name && strlen($name) > 2) {
-                        $data['officials'][] = [
-                            'name' => $name,
-                            'role' => $this->inferRole($section),
-                            'person_url' => $link[1],
-                            'email' => '',
-                            'phone' => '',
-                        ];
-                        $this->officialsFound++;
+                if ($name && $email && strlen($name) > 2) {
+                    $role = 'Councillor';
+                    if (stripos($row, 'mayor') !== false || stripos($name, 'mayor') !== false) {
+                        $name = preg_replace('/^Mayor\s+/i', '', $name);
+                        $role = 'Mayor';
                     }
+                    $name = preg_replace('/^Councillor\s+/i', '', $name);
+
+                    $contacts[] = [
+                        'name' => $name,
+                        'email' => $email,
+                        'phone' => '',
+                        'role' => $role,
+                    ];
                 }
             }
         }
 
-        return $data;
+        return $contacts;
     }
 
     /**
-     * Parse a CivicInfo BC person page for contact details
+     * Match a scraped contact to an existing DB official and update email
      */
-    private function parsePersonPage(string $html): array {
-        $data = [];
+    private function matchAndUpdateEmail(array $contact, string $municipality): bool {
+        $name = $contact['name'];
 
-        // Email
-        if (preg_match('/mailto:([^"\'>\s]+)/i', $html, $emailMatch)) {
-            $data['email'] = trim($emailMatch[1]);
-        }
-
-        // Phone
-        if (preg_match('/(?:Phone|Tel)[^<]*?(\(\d{3}\)\s*\d{3}[\s-]\d{4}|\d{3}[\s.-]\d{3}[\s.-]\d{4})/si', $html, $phoneMatch)) {
-            $data['phone'] = trim($phoneMatch[1]);
-        }
-
-        // Role/title (may be more specific than what the org page had)
-        if (preg_match('/(?:Primary\s+)?(?:Job\s+)?Title[^<]*?<[^>]*>([^<]+)/si', $html, $titleMatch)) {
-            $title = trim($this->stripHtml($titleMatch[1]));
-            if ($title && strlen($title) > 2) {
-                $data['role'] = $title;
-            }
-        }
-
-        return $data;
-    }
-
-    /**
-     * Find existing municipality_id by name
-     */
-    private function findMunicipalityId(string $orgName): ?int {
-        // Strip prefixes like "City of", "District of", "Town of"
-        $searchName = preg_replace('/^(City|District|Town|Village|Resort Municipality)\s+of\s+/i', '', $orgName);
-        $searchName = trim($searchName);
-
+        // Try exact name match within the municipality
         $stmt = $this->db->prepare(
-            'SELECT id FROM municipalities WHERE name LIKE ? OR name LIKE ? LIMIT 1'
+            'SELECT id, name, email FROM elected_officials
+             WHERE government_level = ? AND jurisdiction_name LIKE ? AND name = ?'
         );
-        $stmt->execute(["%{$searchName}%", "%{$orgName}%"]);
-        $result = $stmt->fetchColumn();
+        $stmt->execute(['municipal', "%{$municipality}%", $name]);
+        $existing = $stmt->fetch();
 
-        return $result ? (int) $result : null;
+        // Fuzzy match by last name
+        if (!$existing) {
+            $parts = preg_split('/\s+/', $name);
+            $lastName = end($parts);
+            $stmt = $this->db->prepare(
+                'SELECT id, name, email FROM elected_officials
+                 WHERE government_level = ? AND jurisdiction_name LIKE ? AND last_name = ?'
+            );
+            $stmt->execute(['municipal', "%{$municipality}%", $lastName]);
+            $existing = $stmt->fetch();
+        }
+
+        if ($existing) {
+            $sets = ['email = ?'];
+            $params = [$contact['email']];
+
+            if (!empty($contact['phone'])) {
+                $sets[] = 'phone = COALESCE(NULLIF(?, ""), phone)';
+                $params[] = $contact['phone'];
+            }
+
+            $sets[] = 'source_name = ?';
+            $params[] = 'represent_api+municipal_website';
+            $sets[] = 'confidence_score = LEAST(confidence_score + 1, 3)';
+            $sets[] = 'verified_at = NOW()';
+            $params[] = $existing['id'];
+
+            $stmt = $this->db->prepare(
+                'UPDATE elected_officials SET ' . implode(', ', $sets) . ' WHERE id = ?'
+            );
+            $stmt->execute($params);
+
+            $this->writeLog("    Matched: {$name} -> {$contact['email']}");
+            return true;
+        } else {
+            // Insert as new official from municipal website
+            $nameParts = $this->splitName($name);
+            $municipalityId = $this->findMunicipalityId($municipality);
+
+            $stmt = $this->db->prepare(
+                'INSERT INTO elected_officials
+                    (government_level, jurisdiction_name, municipality_id, name, first_name, last_name,
+                     role, email, phone, source_url, source_name, confidence_score)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                 ON DUPLICATE KEY UPDATE email = VALUES(email), phone = COALESCE(NULLIF(VALUES(phone), ""), phone),
+                    source_name = VALUES(source_name), updated_at = NOW()'
+            );
+            $stmt->execute([
+                'municipal', $municipality, $municipalityId, $name,
+                $nameParts['first'], $nameParts['last'],
+                $contact['role'] ?? 'Councillor',
+                $contact['email'], $contact['phone'] ?? '',
+                self::COUNCIL_PAGES[$municipality] ?? '', 'municipal_website'
+            ]);
+
+            $this->officialsInserted++;
+            $this->officialsFound++;
+            $this->writeLog("    New from website: {$name} ({$contact['email']})");
+            return true;
+        }
     }
 
     /**
-     * Upsert a local government official
+     * Upsert an official from Represent API
      */
-    private function upsertOfficial(array $data, string $jurisdiction, string $govLevel, ?int $municipalityId): void {
+    private function upsertOfficial(array $data, string $sourceName): void {
         $name = $data['name'];
+        $jurisdiction = $data['jurisdiction'];
+        $level = 'municipal';
 
         $stmt = $this->db->prepare(
             'SELECT id FROM elected_officials
              WHERE name = ? AND jurisdiction_name = ? AND government_level = ?'
         );
-        $stmt->execute([$name, $jurisdiction, $govLevel]);
+        $stmt->execute([$name, $jurisdiction, $level]);
         $existing = $stmt->fetchColumn();
-
-        // Split name into first/last
-        $nameParts = $this->splitName($name);
 
         if ($existing) {
             $stmt = $this->db->prepare(
                 'UPDATE elected_officials SET
                     first_name = ?, last_name = ?, role = ?,
-                    email = COALESCE(NULLIF(?, ""), email),
                     phone = COALESCE(NULLIF(?, ""), phone),
-                    municipality_id = COALESCE(?, municipality_id),
-                    source_url = ?, source_name = ?, updated_at = NOW()
+                    photo_url = COALESCE(NULLIF(?, ""), photo_url),
+                    source_url = ?, updated_at = NOW()
                  WHERE id = ?'
             );
             $stmt->execute([
-                $nameParts['first'], $nameParts['last'], $data['role'],
-                $data['email'] ?? '', $data['phone'] ?? '',
-                $municipalityId,
-                self::CIVICINFO_BASE, 'civicinfo',
-                $existing
+                $data['first_name'], $data['last_name'], $data['role'],
+                $data['phone'], $data['photo_url'],
+                $data['source_url'], $existing
             ]);
             $this->officialsUpdated++;
         } else {
             $stmt = $this->db->prepare(
                 'INSERT INTO elected_officials
                     (government_level, jurisdiction_name, municipality_id, name, first_name, last_name,
-                     role, email, phone, source_url, source_name, confidence_score)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
+                     role, email, phone, photo_url, source_url, source_name, confidence_score)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
             );
+            $municipalityId = $this->findMunicipalityId($jurisdiction);
             $stmt->execute([
-                $govLevel, $jurisdiction, $municipalityId, $name,
-                $nameParts['first'], $nameParts['last'], $data['role'],
-                $data['email'] ?? '', $data['phone'] ?? '',
-                self::CIVICINFO_BASE, 'civicinfo'
+                $level, $jurisdiction, $municipalityId, $name,
+                $data['first_name'], $data['last_name'], $data['role'],
+                $data['email'], $data['phone'], $data['photo_url'],
+                $data['source_url'], $sourceName
             ]);
             $this->officialsInserted++;
         }
     }
 
-    /**
-     * Fetch from Represent API for municipal officials (verification data)
-     */
-    private function fetchRepresentAPI(): array {
-        $result = $this->fetch(self::REPRESENT_MUNICIPAL_URL);
-        if ($result['error']) {
-            $this->writeLog("Represent API error: " . $result['error']);
-            return [];
-        }
+    private function findMunicipalityId(string $name): ?int {
+        $searchName = preg_replace('/^(City|District|Town|Village|Resort Municipality)\s+of\s+/i', '', $name);
+        $searchName = trim($searchName);
 
-        $json = json_decode($result['body'], true);
-        if (!$json || !isset($json['objects'])) return [];
+        $stmt = $this->db->prepare(
+            'SELECT id FROM municipalities WHERE name LIKE ? OR name LIKE ? LIMIT 1'
+        );
+        $stmt->execute(["%{$searchName}%", "%{$name}%"]);
+        $result = $stmt->fetchColumn();
 
-        $byMuni = [];
-        foreach ($json['objects'] as $obj) {
-            $district = $obj['district_name'] ?? '';
-            $byMuni[$district][] = [
-                'name' => trim($obj['name'] ?? ''),
-                'email' => trim($obj['email'] ?? ''),
-                'role' => trim($obj['elected_office'] ?? ''),
-            ];
-        }
-
-        return $byMuni;
+        return $result ? (int) $result : null;
     }
 
-    /**
-     * Cross-reference CivicInfo data with Represent API
-     */
-    private function crossReferenceWithRepresent(array $representData): void {
-        if (empty($representData)) return;
-        $this->writeLog("Cross-referencing with Represent API...");
-
-        $matched = 0;
-        foreach ($representData as $municipality => $officials) {
-            foreach ($officials as $repOfficial) {
-                // Find matching official in our DB
-                $stmt = $this->db->prepare(
-                    'SELECT id, name, email FROM elected_officials
-                     WHERE government_level IN (?, ?) AND last_name = ?
-                     AND jurisdiction_name LIKE ?'
-                );
-                $lastName = $this->splitName($repOfficial['name'])['last'];
-                $stmt->execute(['municipal', 'regional_district', $lastName, "%{$municipality}%"]);
-                $dbOfficial = $stmt->fetch();
-
-                if (!$dbOfficial) continue;
-
-                $fieldsMatched = ['name' => true];
-                $fieldsMismatched = [];
-
-                if ($repOfficial['email'] && $dbOfficial['email']) {
-                    if (strtolower($repOfficial['email']) === strtolower($dbOfficial['email'])) {
-                        $fieldsMatched['email'] = true;
-                    } else {
-                        $fieldsMismatched['email'] = [
-                            'civicinfo' => $dbOfficial['email'],
-                            'represent' => $repOfficial['email'],
-                        ];
-                    }
-                }
-
-                $verifyStmt = $this->db->prepare(
-                    'INSERT INTO official_verifications
-                        (official_id, source_name, source_url, fields_matched, fields_mismatched)
-                     VALUES (?, ?, ?, ?, ?)'
-                );
-                $verifyStmt->execute([
-                    $dbOfficial['id'], 'represent_api',
-                    self::REPRESENT_MUNICIPAL_URL,
-                    json_encode($fieldsMatched),
-                    !empty($fieldsMismatched) ? json_encode($fieldsMismatched) : null,
-                ]);
-
-                $updateStmt = $this->db->prepare(
-                    'UPDATE elected_officials SET confidence_score = LEAST(confidence_score + 1, 3), verified_at = NOW() WHERE id = ?'
-                );
-                $updateStmt->execute([$dbOfficial['id']]);
-                $matched++;
-            }
-        }
-
-        $this->writeLog("Cross-reference: {$matched} matched against Represent API");
-    }
-
-    private function inferRole(string $section): string {
-        return $section === 'regionaldistricts' ? 'Regional District Director' : 'Councillor';
+    private function cleanPhone(string $phone): string {
+        if (!$phone) return '';
+        // Remove country code prefix
+        $phone = preg_replace('/^1\s+/', '', $phone);
+        return trim($phone);
     }
 
     private function splitName(string $name): array {

@@ -112,18 +112,25 @@ switch ($action) {
     case 'run':
         $level = $_GET['level'] ?? 'provincial';
 
-        if ($level === 'provincial') {
-            require_once __DIR__ . '/../../app/scrapers/ProvincialScraper.php';
-            $scraper = new ProvincialScraper();
+        $scraperMap = [
+            'provincial' => ['file' => 'ProvincialScraper.php', 'class' => 'ProvincialScraper'],
+            'municipal' => ['file' => 'LocalGovScraper.php', 'class' => 'LocalGovScraper'],
+        ];
 
-            try {
-                $result = $scraper->scrapeAll();
-                echo json_encode(['action' => 'run', 'level' => $level, 'result' => $result], JSON_PRETTY_PRINT);
-            } catch (Exception $e) {
-                echo json_encode(['action' => 'run', 'level' => $level, 'error' => $e->getMessage()], JSON_PRETTY_PRINT);
-            }
-        } else {
-            echo json_encode(['error' => "Level '$level' not yet supported via this endpoint"]);
+        if (!isset($scraperMap[$level])) {
+            echo json_encode(['error' => "Level '$level' not supported. Available: " . implode(', ', array_keys($scraperMap))]);
+            break;
+        }
+
+        $info = $scraperMap[$level];
+        require_once __DIR__ . '/../../app/scrapers/' . $info['file'];
+        $scraper = new $info['class']();
+
+        try {
+            $result = $scraper->scrapeAll();
+            echo json_encode(['action' => 'run', 'level' => $level, 'result' => $result], JSON_PRETTY_PRINT);
+        } catch (Exception $e) {
+            echo json_encode(['action' => 'run', 'level' => $level, 'error' => $e->getMessage()], JSON_PRETTY_PRINT);
         }
         break;
 
