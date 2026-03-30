@@ -22,10 +22,17 @@
     RewriteRule ^sql/ - [F,L]
     RewriteRule ^templates/ - [F,L]
 
-    # Route everything through public/
+    # Disable directory listings
+    Options -Indexes
+
+    # Route root to public/index.php
+    RewriteRule ^$ public/index.php [L]
+
+    # Route everything else through public/
+    # Skip if the file already exists (e.g. public/ files after first rewrite pass)
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^(.*)$ public/$1 [L]
+    RewriteRule ^(.+)$ public/$1 [L]
 </IfModule>
 
 # Deny access to sensitive files
