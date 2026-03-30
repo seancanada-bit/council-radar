@@ -3,9 +3,11 @@
  * Scraper for BC Provincial MLAs
  *
  * Sources:
- *   1. Represent API (represent.opennorth.ca) — JSON API with all 93 MLAs
- *   2. BC Legislature contact page (leg.bc.ca) — static HTML table for verification
- *   3. Individual MLA profile pages (leg.bc.ca) — office addresses/phones (JS-rendered)
+ *   1. Represent API (represent.opennorth.ca) - JSON API with all 93 MLAs
+ *   2. BC Legislature contact page (leg.bc.ca) - HTML table with official emails
+ *
+ * The leg.bc.ca contact page is the authoritative source for email addresses.
+ * The Represent API provides riding, party, and photo data.
  */
 
 require_once __DIR__ . '/BaseScraper.php';
@@ -14,7 +16,6 @@ class ProvincialScraper extends BaseScraper {
 
     private const REPRESENT_API_URL = 'https://represent.opennorth.ca/representatives/bc-legislature/?limit=100&format=json';
     private const LEG_CONTACT_URL = 'https://www.leg.bc.ca/contact-us/mla-contact-information';
-    private const LEG_PROFILE_BASE = 'https://www.leg.bc.ca/members/43rd-Parliament/';
 
     private string $logFile;
     private int $officialsFound = 0;
@@ -31,27 +32,28 @@ class ProvincialScraper extends BaseScraper {
         $this->writeLog("Starting provincial MLA scrape");
 
         try {
-            // Step 1: Fetch from Represent API (primary source)
+            // Step 1: Fetch from Represent API (primary source for riding/party/photo)
             $representData = $this->fetchRepresentAPI();
             if (empty($representData)) {
                 throw new \Exception('Represent API returned no data');
             }
             $this->writeLog("Represent API: " . count($representData) . " MLAs found");
 
-            // Step 2: Fetch from leg.bc.ca contact page (verification source)
+            // Step 2: Fetch from leg.bc.ca contact page (authoritative emails)
             $legContactData = $this->fetchLegContactPage();
             $this->writeLog("leg.bc.ca contacts: " . count($legContactData) . " entries found");
 
-            // Step 3: Upsert officials from Represent API data
-            foreach ($representData as $mla) {
-                $this->upsertOfficial($mla, 'represent_api');
+            // Step 3: Merge leg.bc.ca emails into Represent data
+            $mergedData = $this->mergeData($representData, $legContactData);
+            $this->writeLog("Merged data: " . count($mergedData) . " MLAs with enriched data");
+
+            // Step 4: Upsert officials
+            foreach ($mergedData as $mla) {
+                $this->upsertOfficial($mla);
             }
 
-            // Step 4: Cross-reference with leg.bc.ca contact data
-            $this->crossReferenceWithLeg($legContactData);
-
-            // Step 5: Fetch individual profile pages for office details
-            $this->enrichFromProfiles($representData);
+            // Step 5: Cross-reference and bump confidence for verified matches
+            $this->crossReference($representData, $legContactData);
 
             $durationMs = (int) ((microtime(true) - $startTime) * 1000);
             $this->logOfficialsScrape('provincial_represent', 'provincial', 'success', $durationMs);
@@ -73,7 +75,7 @@ class ProvincialScraper extends BaseScraper {
     }
 
     /**
-     * Not used — provincial MLAs aren't tied to individual municipalities
+     * Not used - provincial MLAs aren't tied to individual municipalities
      */
     public function scrapeMunicipality(array $muni): array {
         return [];
@@ -116,8 +118,8 @@ class ProvincialScraper extends BaseScraper {
     }
 
     /**
-     * Scrape the leg.bc.ca MLA contact information page (static HTML table)
-     * Returns array of ['name' => ..., 'email' => ...]
+     * Scrape the leg.bc.ca MLA contact information page
+     * Returns array of ['name' => ..., 'email' => ..., 'profile_url' => ...]
      */
     private function fetchLegContactPage(): array {
         $this->writeLog("Fetching leg.bc.ca contact page...");
@@ -132,22 +134,27 @@ class ProvincialScraper extends BaseScraper {
         $contacts = [];
         $html = $result['body'];
 
-        // Parse the HTML table — each row has MLA name (linked) and email (mailto)
-        if (preg_match('/<table[^>]*>.*?<\/table>/si', $html, $tableMatch)) {
-            $table = $tableMatch[0];
-            preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $table, $rows);
-
+        // The page has a table with MLA name (linked) and email (mailto)
+        // Each row: <td><a href="/members/...">Hon. First Last, K.C.</a></td><td><a href="mailto:...">email</a></td>
+        if (preg_match_all('/<tr[^>]*>(.*?)<\/tr>/si', $html, $rows)) {
             foreach ($rows[1] as $row) {
                 // Skip header rows
                 if (strpos($row, '<th') !== false) continue;
 
-                // Extract name from first cell (may have link and "Hon." prefix)
+                // Extract name and profile URL from first cell
                 $name = '';
-                if (preg_match('/<td[^>]*>(.*?)<\/td>/si', $row, $cell1)) {
-                    $name = $this->stripHtml($cell1[1]);
-                    // Remove honorifics for matching
-                    $name = preg_replace('/^Hon\.\s*/i', '', $name);
-                    $name = trim($name);
+                $profileUrl = '';
+                if (preg_match('/<a[^>]+href="([^"]*\/members\/[^"]*)"[^>]*>(.*?)<\/a>/si', $row, $linkMatch)) {
+                    $profileUrl = 'https://www.leg.bc.ca' . $linkMatch[1];
+                    $rawName = $this->stripHtml($linkMatch[2]);
+                    $name = $this->cleanMlaName($rawName);
+                }
+
+                // Fallback: name from cell text if no link
+                if (!$name) {
+                    if (preg_match('/<td[^>]*>(.*?)<\/td>/si', $row, $cell)) {
+                        $name = $this->cleanMlaName($this->stripHtml($cell[1]));
+                    }
                 }
 
                 // Extract email from mailto link
@@ -160,6 +167,7 @@ class ProvincialScraper extends BaseScraper {
                     $contacts[] = [
                         'name' => $name,
                         'email' => $email,
+                        'profile_url' => $profileUrl,
                         'source_url' => self::LEG_CONTACT_URL,
                     ];
                 }
@@ -170,12 +178,115 @@ class ProvincialScraper extends BaseScraper {
     }
 
     /**
+     * Clean an MLA name by removing honorifics and credentials
+     * "Hon. David Eby, K.C." -> "David Eby"
+     * "Laanas - Tamara Davidson" -> "Laanas - Tamara Davidson"
+     */
+    private function cleanMlaName(string $name): string {
+        // Remove "Hon." or "Honourable"
+        $name = preg_replace('/^Hon(?:ourable)?\.?\s*/i', '', $name);
+        // Remove trailing credentials like ", K.C." or ", Q.C."
+        $name = preg_replace('/,?\s+[KQ]\.?C\.?\s*$/i', '', $name);
+        return trim($name);
+    }
+
+    /**
+     * Normalize a name for comparison
+     * Lowercase, remove punctuation, collapse whitespace
+     */
+    private function normalizeName(string $name): string {
+        $name = mb_strtolower($name);
+        $name = $this->cleanMlaName($name);
+        $name = preg_replace('/[^a-z\s-]/', '', $name);
+        $name = preg_replace('/\s+/', ' ', $name);
+        return trim($name);
+    }
+
+    /**
+     * Merge leg.bc.ca email data into Represent API data
+     * Match by normalized name
+     */
+    private function mergeData(array $representData, array $legContacts): array {
+        // Build lookup from leg.bc.ca by normalized name
+        $legByName = [];
+        foreach ($legContacts as $contact) {
+            $normalized = $this->normalizeName($contact['name']);
+            $legByName[$normalized] = $contact;
+
+            // Also index by last name + first initial for fuzzy matching
+            $parts = explode(' ', $normalized);
+            if (count($parts) >= 2) {
+                $lastName = end($parts);
+                $firstName = $parts[0];
+                $legByName[$lastName . '_' . substr($firstName, 0, 1)] = $contact;
+            }
+        }
+
+        $merged = 0;
+        foreach ($representData as &$mla) {
+            $normalized = $this->normalizeName($mla['name']);
+
+            // Exact normalized match
+            if (isset($legByName[$normalized])) {
+                $legEntry = $legByName[$normalized];
+                if (!empty($legEntry['email'])) {
+                    $mla['email'] = $legEntry['email'];
+                }
+                if (!empty($legEntry['profile_url'])) {
+                    $mla['profile_url'] = $legEntry['profile_url'];
+                }
+                $mla['_leg_matched'] = true;
+                $merged++;
+                continue;
+            }
+
+            // Try last name + first initial
+            $lastName = strtolower($mla['last_name']);
+            $firstInitial = strtolower(substr($mla['first_name'], 0, 1));
+            $fuzzyKey = $lastName . '_' . $firstInitial;
+
+            if (isset($legByName[$fuzzyKey])) {
+                $legEntry = $legByName[$fuzzyKey];
+                if (!empty($legEntry['email'])) {
+                    $mla['email'] = $legEntry['email'];
+                }
+                if (!empty($legEntry['profile_url'])) {
+                    $mla['profile_url'] = $legEntry['profile_url'];
+                }
+                $mla['_leg_matched'] = true;
+                $merged++;
+                continue;
+            }
+
+            // Try matching by email pattern (firstname.lastname.MLA@leg.bc.ca)
+            $expectedEmail = strtolower($mla['first_name'] . '.' . $mla['last_name'] . '.MLA@leg.bc.ca');
+            foreach ($legContacts as $contact) {
+                if (strtolower($contact['email']) === $expectedEmail) {
+                    $mla['email'] = $contact['email'];
+                    if (!empty($contact['profile_url'])) {
+                        $mla['profile_url'] = $contact['profile_url'];
+                    }
+                    $mla['_leg_matched'] = true;
+                    $merged++;
+                    break;
+                }
+            }
+        }
+        unset($mla);
+
+        $this->writeLog("Merged {$merged} of " . count($representData) . " MLAs with leg.bc.ca data");
+        return $representData;
+    }
+
+    /**
      * Upsert an official into the elected_officials table
      */
-    private function upsertOfficial(array $data, string $sourceName): void {
+    private function upsertOfficial(array $data): void {
         $name = $data['name'];
         $jurisdiction = $data['district_name'];
         $level = 'provincial';
+        $sourceUrl = $data['profile_url'] ?? $data['source_url'] ?? self::REPRESENT_API_URL;
+        $sourceName = !empty($data['_leg_matched']) ? 'represent_api+leg_bc_ca' : 'represent_api';
 
         // Check if exists
         $stmt = $this->db->prepare(
@@ -186,7 +297,6 @@ class ProvincialScraper extends BaseScraper {
         $existing = $stmt->fetchColumn();
 
         if ($existing) {
-            // Update
             $stmt = $this->db->prepare(
                 'UPDATE elected_officials SET
                     first_name = ?, last_name = ?, role = ?, party = ?,
@@ -196,45 +306,41 @@ class ProvincialScraper extends BaseScraper {
             );
             $stmt->execute([
                 $data['first_name'], $data['last_name'], 'MLA', $data['party'],
-                $data['email'], $data['photo_url'], $data['source_url'], $sourceName,
+                $data['email'], $data['photo_url'], $sourceUrl, $sourceName,
                 $existing
             ]);
             $this->officialsUpdated++;
         } else {
-            // Insert
             $stmt = $this->db->prepare(
                 'INSERT INTO elected_officials
                     (government_level, jurisdiction_name, name, first_name, last_name,
                      role, party, email, photo_url, source_url, source_name, confidence_score)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
+            $confidence = !empty($data['_leg_matched']) ? 2 : 1;
             $stmt->execute([
                 $level, $jurisdiction, $name, $data['first_name'], $data['last_name'],
                 'MLA', $data['party'], $data['email'], $data['photo_url'],
-                $data['source_url'], $sourceName
+                $sourceUrl, $sourceName, $confidence
             ]);
             $this->officialsInserted++;
         }
     }
 
     /**
-     * Cross-reference Represent API data with leg.bc.ca contact page
-     * Updates confidence_score and logs verification results
+     * Cross-reference both sources and log verification results
      */
-    private function crossReferenceWithLeg(array $legContacts): void {
+    private function crossReference(array $representData, array $legContacts): void {
         if (empty($legContacts)) return;
 
-        $this->writeLog("Cross-referencing with leg.bc.ca data...");
+        $this->writeLog("Running cross-reference verification...");
 
-        // Build lookup by normalized last name
-        $legByLastName = [];
+        // Build lookup by normalized name from leg data
+        $legByNorm = [];
         foreach ($legContacts as $contact) {
-            $parts = preg_split('/[\s,]+/', $contact['name']);
-            $lastName = strtolower(end($parts));
-            $legByLastName[$lastName][] = $contact;
+            $legByNorm[$this->normalizeName($contact['name'])] = $contact;
         }
 
-        // Match against our DB records
         $stmt = $this->db->prepare(
             'SELECT id, name, first_name, last_name, email
              FROM elected_officials WHERE government_level = ?'
@@ -242,36 +348,42 @@ class ProvincialScraper extends BaseScraper {
         $stmt->execute(['provincial']);
         $officials = $stmt->fetchAll();
 
-        $matched = 0;
+        $verified = 0;
         foreach ($officials as $official) {
-            $lastName = strtolower($official['last_name']);
+            $normalized = $this->normalizeName($official['name']);
 
-            if (!isset($legByLastName[$lastName])) continue;
+            // Try exact match
+            $legMatch = $legByNorm[$normalized] ?? null;
 
-            // Find best match (could be multiple people with same last name)
-            $bestMatch = null;
-            foreach ($legByLastName[$lastName] as $legContact) {
-                $firstInitial = strtolower(substr($official['first_name'], 0, 1));
-                if (stripos($legContact['name'], $official['first_name']) !== false
-                    || stripos($legContact['name'], $firstInitial) === 0) {
-                    $bestMatch = $legContact;
-                    break;
+            // Try last name + first initial
+            if (!$legMatch) {
+                $lastName = strtolower($official['last_name']);
+                $firstInit = strtolower(substr($official['first_name'], 0, 1));
+                foreach ($legContacts as $lc) {
+                    $lcNorm = $this->normalizeName($lc['name']);
+                    $lcParts = explode(' ', $lcNorm);
+                    $lcLast = end($lcParts);
+                    $lcFirst = $lcParts[0] ?? '';
+                    if ($lcLast === $lastName && substr($lcFirst, 0, 1) === $firstInit) {
+                        $legMatch = $lc;
+                        break;
+                    }
                 }
             }
 
-            if (!$bestMatch) continue;
+            if (!$legMatch) continue;
 
             $fieldsMatched = ['name' => true];
             $fieldsMismatched = [];
 
             // Compare email
-            if ($bestMatch['email'] && $official['email']) {
-                if (strtolower($bestMatch['email']) === strtolower($official['email'])) {
+            if ($legMatch['email'] && $official['email']) {
+                if (strtolower($legMatch['email']) === strtolower($official['email'])) {
                     $fieldsMatched['email'] = true;
                 } else {
                     $fieldsMismatched['email'] = [
-                        'represent' => $official['email'],
-                        'leg_bc_ca' => $bestMatch['email'],
+                        'db' => $official['email'],
+                        'leg_bc_ca' => $legMatch['email'],
                     ];
                 }
             }
@@ -290,178 +402,16 @@ class ProvincialScraper extends BaseScraper {
                 !empty($fieldsMismatched) ? json_encode($fieldsMismatched) : null,
             ]);
 
-            // Bump confidence if name matched
+            // Bump confidence
             $updateStmt = $this->db->prepare(
                 'UPDATE elected_officials SET confidence_score = LEAST(confidence_score + 1, 3), verified_at = NOW() WHERE id = ?'
             );
             $updateStmt->execute([$official['id']]);
 
-            $matched++;
+            $verified++;
         }
 
-        $this->writeLog("Cross-reference: {$matched} of " . count($officials) . " matched against leg.bc.ca");
-    }
-
-    /**
-     * Enrich officials with office address/phone from individual leg.bc.ca profile pages
-     * These pages are JS-rendered but may contain data in script tags or meta elements
-     */
-    private function enrichFromProfiles(array $representData): void {
-        $this->writeLog("Enriching from individual profile pages...");
-        $enriched = 0;
-        $failed = 0;
-
-        foreach ($representData as $mla) {
-            // Build profile URL: LastName-FirstName
-            $slug = $this->buildProfileSlug($mla['last_name'], $mla['first_name']);
-            $url = self::LEG_PROFILE_BASE . $slug;
-
-            $this->rateLimit();
-            $result = $this->fetchWithBackoff($url);
-
-            if ($result['error']) {
-                // Try alternative slug formats
-                $altSlug = $this->buildProfileSlug($mla['last_name'], $mla['first_name'], true);
-                if ($altSlug !== $slug) {
-                    $this->rateLimit();
-                    $result = $this->fetchWithBackoff(self::LEG_PROFILE_BASE . $altSlug);
-                }
-            }
-
-            if ($result['error']) {
-                $this->writeLog("  Profile fetch failed for {$mla['name']}: " . $result['error']);
-                $failed++;
-                continue;
-            }
-
-            $profileData = $this->parseProfilePage($result['body']);
-            if (!empty($profileData)) {
-                $this->updateOfficialProfile($mla['name'], $mla['district_name'], $profileData);
-                $enriched++;
-            }
-        }
-
-        $this->writeLog("Profiles enriched: {$enriched}, failed: {$failed}");
-    }
-
-    /**
-     * Build a profile URL slug from name parts
-     * Format: LastName-FirstName (e.g., Banman-Bruce)
-     */
-    private function buildProfileSlug(string $lastName, string $firstName, bool $alternate = false): string {
-        // Remove suffixes like "K.C."
-        $lastName = preg_replace('/\s+(K\.C\.|Q\.C\.|K\.?C|Q\.?C)$/i', '', $lastName);
-        $firstName = preg_replace('/\s+(K\.C\.|Q\.C\.|K\.?C|Q\.?C)$/i', '', $firstName);
-
-        // Handle hyphenated/compound names
-        $lastName = trim($lastName);
-        $firstName = trim($firstName);
-
-        if ($alternate) {
-            // Try first name only (no middle names)
-            $firstParts = explode(' ', $firstName);
-            $firstName = $firstParts[0];
-        }
-
-        // Replace spaces with hyphens, keep existing hyphens
-        $lastName = str_replace(' ', '-', $lastName);
-        $firstName = str_replace(' ', '-', $firstName);
-
-        return $lastName . '-' . $firstName;
-    }
-
-    /**
-     * Parse a JS-rendered MLA profile page for embedded data
-     * Look for phone numbers, addresses in script tags, JSON-LD, or meta tags
-     */
-    private function parseProfilePage(string $html): array {
-        $data = [];
-
-        // Look for phone patterns in the raw HTML (even if JS-rendered, phone numbers may appear in source)
-        if (preg_match('/(?:Legislature|Victoria)\s*(?:Office)?[^<]*?(\(\d{3}\)\s*\d{3}[\s-]\d{4}|\d{3}[\s.-]\d{3}[\s.-]\d{4})/si', $html, $legPhone)) {
-            $data['phone'] = trim($legPhone[1]);
-        }
-
-        // Constituency office phone
-        if (preg_match('/Constituency\s*Office[^<]*?(\(\d{3}\)\s*\d{3}[\s-]\d{4}|\d{3}[\s.-]\d{3}[\s.-]\d{4})/si', $html, $constPhone)) {
-            $data['constituency_phone'] = trim($constPhone[1]);
-        }
-
-        // Look for address patterns
-        if (preg_match('/Parliament Buildings[^<]*?Victoria[^<]*?V\d[A-Z]\s*\d[A-Z]\d/si', $html, $legAddr)) {
-            $data['office_address'] = trim($this->stripHtml($legAddr[0]));
-        }
-
-        // Constituency office address (street address before a city name + postal code)
-        if (preg_match('/Constituency\s*Office[^<]*?((?:\d+[^<]+?(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Highway|Hwy|Way)[^<]*?BC[^<]*?V\d[A-Z]\s*\d[A-Z]\d))/si', $html, $constAddr)) {
-            $data['constituency_office_address'] = trim($this->stripHtml($constAddr[1]));
-        }
-
-        // Look for embedded JSON data (some pages embed member data in script tags)
-        if (preg_match('/<script[^>]*>\s*(?:var|let|const)\s+\w*[Mm]ember\w*\s*=\s*(\{[^;]+\});/s', $html, $jsonMatch)) {
-            $jsonData = json_decode($jsonMatch[1], true);
-            if ($jsonData) {
-                $data['_json'] = $jsonData;
-            }
-        }
-
-        return $data;
-    }
-
-    /**
-     * Update an official's profile with enriched data
-     */
-    private function updateOfficialProfile(string $name, string $jurisdiction, array $profileData): void {
-        $sets = [];
-        $params = [];
-
-        if (!empty($profileData['phone'])) {
-            $sets[] = 'phone = ?';
-            $params[] = $profileData['phone'];
-        }
-        if (!empty($profileData['office_address'])) {
-            $sets[] = 'office_address = ?';
-            $params[] = $profileData['office_address'];
-        }
-        if (!empty($profileData['constituency_office_address'])) {
-            $sets[] = 'constituency_office_address = ?';
-            $params[] = $profileData['constituency_office_address'];
-        }
-
-        if (empty($sets)) return;
-
-        $sql = 'UPDATE elected_officials SET ' . implode(', ', $sets) .
-               ' WHERE name = ? AND jurisdiction_name = ? AND government_level = ?';
-        $params[] = $name;
-        $params[] = $jurisdiction;
-        $params[] = 'provincial';
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-    }
-
-    /**
-     * Fetch with exponential backoff on 429/403
-     */
-    private function fetchWithBackoff(string $url, int $maxRetries = 3): array {
-        $delay = $this->requestDelay;
-
-        for ($attempt = 0; $attempt <= $maxRetries; $attempt++) {
-            $result = $this->fetch($url);
-
-            if ($result['code'] === 429 || $result['code'] === 403) {
-                if ($attempt < $maxRetries) {
-                    $delay *= 2;
-                    $this->writeLog("  Rate limited ({$result['code']}), backing off {$delay}s...");
-                    sleep($delay);
-                    continue;
-                }
-            }
-
-            return $result;
-        }
-
-        return ['body' => '', 'code' => 0, 'error' => 'Max retries exceeded'];
+        $this->writeLog("Cross-reference: {$verified} of " . count($officials) . " verified against leg.bc.ca");
     }
 
     /**
