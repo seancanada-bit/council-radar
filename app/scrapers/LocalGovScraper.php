@@ -328,6 +328,7 @@ class LocalGovScraper extends BaseScraper {
 
         // Strategy 5: Paired by email username matching known names on page
         // Extract all person names and all emails, match by email prefix
+        // This is the most reliable strategy when first.last@domain emails are used
         if (empty($contacts)) {
             $allEmails = [];
             if (preg_match_all('/mailto:([^"\'>\s]+)/i', $html, $em)) {
@@ -335,9 +336,19 @@ class LocalGovScraper extends BaseScraper {
             }
 
             $allNames = [];
+            // Get names from Mayor/Councillor prefixed text
             if (preg_match_all('/(?:Mayor|Councillor|Councilor)\s+([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)?[A-Za-z]+(?:\s+[A-Za-z]+)*)/i', $html, $nm)) {
-                $allNames = array_unique($nm[1]);
+                $allNames = array_merge($allNames, $nm[1]);
             }
+            // Also get names from <strong> tags
+            if (preg_match_all('/<(?:strong|b)[^>]*>\s*([A-Z][a-z]+(?:\s+[A-Z]\'?[a-z]+)+)\s*<\/(?:strong|b)>/si', $html, $nm)) {
+                $allNames = array_merge($allNames, $nm[1]);
+            }
+            $allNames = array_unique($allNames);
+            // Filter out non-person names
+            $allNames = array_filter($allNames, function($n) {
+                return !preg_match('/^(Nanaimo|City|Town|District|Council|Board|Meeting|Office|Contact|General)/i', $n);
+            });
 
             foreach ($allEmails as $email) {
                 if (!$this->isValidEmail($email)) continue;
