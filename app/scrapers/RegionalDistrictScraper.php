@@ -114,6 +114,8 @@ class RegionalDistrictScraper extends BaseScraper {
     public function __construct() {
         parent::__construct();
         $this->logFile = __DIR__ . '/../../logs/officials_rd.log';
+        // Ensure UTF-8 for this session to prevent collation mismatches
+        $this->db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
     }
 
     public function scrapeAll(): array {
@@ -122,7 +124,11 @@ class RegionalDistrictScraper extends BaseScraper {
 
         try {
             foreach (self::REGIONAL_DISTRICTS as $rdName => $config) {
-                $this->scrapeRegionalDistrict($rdName, $config);
+                try {
+                    $this->scrapeRegionalDistrict($rdName, $config);
+                } catch (\Exception $e) {
+                    $this->writeLog("  ERROR for {$rdName}: " . $e->getMessage());
+                }
             }
 
             $durationMs = (int) ((microtime(true) - $startTime) * 1000);
@@ -566,9 +572,14 @@ class RegionalDistrictScraper extends BaseScraper {
      * Upsert a director into the elected_officials table
      */
     private function upsertDirector(array $director, string $rdName): void {
-        $name = $director['name'];
-        $jurisdiction = $rdName . ' - ' . $director['area'];
+        // Force UTF-8 encoding to prevent collation mismatches
+        $name = mb_convert_encoding($director['name'], 'UTF-8', 'UTF-8');
+        $jurisdiction = mb_convert_encoding($rdName . ' - ' . $director['area'], 'UTF-8', 'UTF-8');
         $level = 'regional_district';
+
+        // Strip any non-UTF8 characters
+        $name = preg_replace('/[^\x20-\x7E\xC0-\xFF]/u', '', $name);
+        $jurisdiction = preg_replace('/[^\x20-\x7E\xC0-\xFF\s]/u', '', $jurisdiction);
 
         $this->officialsFound++;
 
