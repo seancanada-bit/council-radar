@@ -22,14 +22,14 @@ class LocalGovScraper extends BaseScraper {
     private const COUNCIL_PAGES = [
         'Parksville' => 'http://www.parksville.ca/cms.asp?wpID=80',
         'Kamloops' => 'https://www.kamloops.ca/city-hall/city-council/council-contact-information-bios',
-        'Cranbrook' => 'https://www.cranbrook.ca/city-government/mayor-and-council',
-        'Colwood' => 'https://www.colwood.ca/government/mayor-council',
-        'Smithers' => 'https://www.smithers.ca/mayor-and-council',
-        'Quesnel' => 'https://www.quesnel.ca/city-hall/mayor-council',
-        'Trail' => 'https://www.trail.ca/en/city-hall/mayor-and-council.aspx',
-        'Revelstoke' => 'https://www.revelstoke.ca/government/mayor-council',
+        'Cranbrook' => 'https://cranbrook.ca/our-city/mayor-and-council/meet-our-councillors',
+        'Colwood' => 'https://www.colwood.ca/local-government/mayor-council/council-profiles',
+        'Smithers' => 'https://www.smithers.ca/node/490',
+        'Quesnel' => 'https://www.quesnel.ca/city-hall/mayor-council/contact-council',
+        'Trail' => 'https://trail.ca/en/inside-city-hall/mayor-and-council.aspx',
+        'Revelstoke' => 'https://revelstoke.ca/191/City-Council',
         'Nanaimo' => 'https://www.nanaimo.ca/your-government/city-council/contact-mayor-and-council',
-        'Victoria' => 'https://www.victoria.ca/government/mayor-council',
+        'Victoria' => 'https://www.victoria.ca/city-government/mayor-council/members-council',
         'Kelowna' => 'https://www.kelowna.ca/city-hall/contact-us/general-inquiries-15',
     ];
 
@@ -154,6 +154,14 @@ class LocalGovScraper extends BaseScraper {
 
             foreach ($contacts as $contact) {
                 if (empty($contact['email'])) continue;
+
+                // Skip junk entries
+                $nameLower = strtolower($contact['name']);
+                if (strlen($contact['name']) < 4
+                    || preg_match('/^(and |the |community |city |town |district |info|admin|general|clerk)/i', $contact['name'])
+                    || preg_match('/^(info|admin|city|council|clerk|reception|general|foi|cityhall|mayorandcouncil|mayor\.council)@/i', $contact['email'])) {
+                    continue;
+                }
 
                 // Try to match to an existing official in the DB
                 $matched = $this->matchAndUpdateEmail($contact, $municipality);
