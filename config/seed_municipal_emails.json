@@ -1,0 +1,111 @@
+[
+  {
+    "_comment": "=== CLEARWATER (District) === No individual emails published. Use corporateservices@docbc.ca for council correspondence."
+  },
+  {"name": "Merlin Blackwell", "role": "Mayor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+  {"name": "Theresa Braaten", "role": "Councillor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+  {"name": "Lynne Frizzle", "role": "Councillor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+  {"name": "Bill Haring", "role": "Councillor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+  {"name": "Lyle Mackenzie", "role": "Councillor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+  {"name": "Ken Matheson", "role": "Councillor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+  {"name": "Shelley Sim", "role": "Councillor", "jurisdiction": "Clearwater", "level": "municipal", "email": ""},
+
+  {
+    "_comment": "=== QUESNEL (City) === No individual emails published. Council correspondence via Mayor and Council Office (250-991-7477) or cityhall@quesnel.ca."
+  },
+  {"name": "Ron Paull", "role": "Mayor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+  {"name": "Scott Elliott", "role": "Councillor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+  {"name": "Tony Goulet", "role": "Councillor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+  {"name": "Debra McKelvie", "role": "Councillor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+  {"name": "Laurey-Anne Roodenburg", "role": "Councillor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+  {"name": "Martin Runge", "role": "Councillor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+  {"name": "Mitch Vik", "role": "Councillor", "jurisdiction": "Quesnel", "level": "municipal", "email": ""},
+
+  {
+    "_comment": "=== TRAIL (City) === No individual emails published. Uses contact forms on website."
+  },
+  {"name": "Colleen Jones", "role": "Mayor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+  {"name": "Bev Benson", "role": "Councillor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+  {"name": "Paul Butler", "role": "Councillor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+  {"name": "Nick Cashol", "role": "Councillor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+  {"name": "Thea Hanson", "role": "Councillor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+  {"name": "Terry Martin", "role": "Councillor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+  {"name": "Doug E. Wilson", "role": "Councillor", "jurisdiction": "Trail", "level": "municipal", "email": ""},
+
+  {
+    "_comment": "=== CRANBROOK (City) === No individual emails published. Uses Microsoft Forms for contact. General: info@cranbrook.ca"
+  },
+  {"name": "Wayne Price", "role": "Mayor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+  {"name": "Norma Blissett", "role": "Councillor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+  {"name": "Wesly Graham", "role": "Councillor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+  {"name": "Mike Peabody", "role": "Councillor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+  {"name": "Ron Popoff", "role": "Councillor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+  {"name": "Wayne Stetski", "role": "Councillor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+  {"name": "Lynnette Wray", "role": "Councillor", "jurisdiction": "Cranbrook", "level": "municipal", "email": ""},
+
+  {
+    "_comment": "=== HOUSTON (District) === No individual emails published. General: doh@houston.ca"
+  },
+  {"name": "Shane Brienen", "role": "Mayor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+  {"name": "Tom Euverman", "role": "Councillor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+  {"name": "Rebecca Hougen", "role": "Councillor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+  {"name": "Lisa Mueller", "role": "Councillor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+  {"name": "Troy Reitsma", "role": "Councillor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+  {"name": "Thomas Stringfellow", "role": "Councillor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+  {"name": "Jonathan Van Barneveld", "role": "Councillor", "jurisdiction": "Houston", "level": "municipal", "email": ""},
+
+  {
+    "_comment": "=== SUN PEAKS (Mountain Resort Municipality) === All individual emails found."
+  },
+  {"name": "Rob O'Toole", "role": "Mayor", "jurisdiction": "Sun Peaks", "level": "municipal", "email": "rotoole@sunpeaksmunicipality.ca"},
+  {"name": "Kelly Dye", "role": "Councillor", "jurisdiction": "Sun Peaks", "level": "municipal", "email": "kdye@sunpeaksmunicipality.ca"},
+  {"name": "Brian Gillespie", "role": "Councillor", "jurisdiction": "Sun Peaks", "level": "municipal", "email": "bgillespie@sunpeaksmunicipality.ca"},
+  {"name": "Len Hrycan", "role": "Councillor", "jurisdiction": "Sun Peaks", "level": "municipal", "email": "lhrycan@sunpeaksmunicipality.ca"},
+  {"name": "Julie Kimmel", "role": "Councillor", "jurisdiction": "Sun Peaks", "level": "municipal", "email": "jkimmel@sunpeaksmunicipality.ca"},
+
+  {
+    "_comment": "=== REVELSTOKE (City) === All individual emails found. NOTE: Nicole Cherlet, Jackie Rhind, Rob Elliott, Michael Brooks-Hill are NOT on the current 2022-2026 council. The current council is listed below. Generic: council@revelstoke.ca"
+  },
+  {"name": "Gary Sulz", "role": "Mayor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "gsulz@revelstoke.ca"},
+  {"name": "Matt Cherry", "role": "Councillor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "mcherry@revelstoke.ca"},
+  {"name": "Lee Devlin", "role": "Councillor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "ldevlin@revelstoke.ca"},
+  {"name": "Austin Luciow", "role": "Councillor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "aluciow@revelstoke.ca"},
+  {"name": "Aaron Orlando", "role": "Councillor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "aorlando@revelstoke.ca"},
+  {"name": "Tim Palmer", "role": "Councillor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "tpalmer@revelstoke.ca"},
+  {"name": "Tim Stapenhurst", "role": "Councillor", "jurisdiction": "Revelstoke", "level": "municipal", "email": "tstapenhurst@revelstoke.ca"},
+
+  {
+    "_comment": "=== NANAIMO (City) === All individual emails found. NOTE: Don Bonner, Zeni Maartman, and Jim Turley are NOT on the current 2022-2026 council. The current council is listed below. Generic: mayor.council@nanaimo.ca"
+  },
+  {"name": "Leonard Krog", "role": "Mayor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "leonard.krog@nanaimo.ca"},
+  {"name": "Sheryl Armstrong", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "sheryl.armstrong@nanaimo.ca"},
+  {"name": "Tyler Brown", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "tyler.brown@nanaimo.ca"},
+  {"name": "Hilary Eastmure", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "hilary.eastmure@nanaimo.ca"},
+  {"name": "Ben Geselbracht", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "ben.geselbracht@nanaimo.ca"},
+  {"name": "Erin Hemmens", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "erin.hemmens@nanaimo.ca"},
+  {"name": "Paul Manly", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "paul.manly@nanaimo.ca"},
+  {"name": "Janice Perrino", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "janice.perrino@nanaimo.ca"},
+  {"name": "Ian Thorpe", "role": "Councillor", "jurisdiction": "Nanaimo", "level": "municipal", "email": "ian.thorpe@nanaimo.ca"},
+
+  {
+    "_comment": "=== SMITHERS (Town) === All individual emails found."
+  },
+  {"name": "Gladys Atrill", "role": "Mayor", "jurisdiction": "Smithers", "level": "municipal", "email": "mayor@smithers.ca"},
+  {"name": "John Buikema", "role": "Councillor", "jurisdiction": "Smithers", "level": "municipal", "email": "jbuikema@smithers.ca"},
+  {"name": "Calvin Elliott", "role": "Councillor", "jurisdiction": "Smithers", "level": "municipal", "email": "celliott@smithers.ca"},
+  {"name": "Laura Leonard", "role": "Councillor", "jurisdiction": "Smithers", "level": "municipal", "email": "lleonard@smithers.ca"},
+  {"name": "Genevieve Paterson", "role": "Councillor", "jurisdiction": "Smithers", "level": "municipal", "email": "gpaterson@smithers.ca"},
+  {"name": "Sam Raven", "role": "Councillor", "jurisdiction": "Smithers", "level": "municipal", "email": "sraven@smithers.ca"},
+  {"name": "Frank Wray", "role": "Councillor", "jurisdiction": "Smithers", "level": "municipal", "email": "fwray@smithers.ca"},
+
+  {
+    "_comment": "=== STEWART (District) === Most individual emails found. Eric Drew email not published on website. Mayor email confirmed as ADanuser@districtofstewart.com."
+  },
+  {"name": "Angela Brand Danuser", "role": "Mayor", "jurisdiction": "Stewart", "level": "municipal", "email": "ADanuser@districtofstewart.com"},
+  {"name": "David Cullinan", "role": "Councillor", "jurisdiction": "Stewart", "level": "municipal", "email": "dcullinan@districtofstewart.com"},
+  {"name": "Eric Drew", "role": "Councillor", "jurisdiction": "Stewart", "level": "municipal", "email": ""},
+  {"name": "Keenan Kennedy", "role": "Councillor", "jurisdiction": "Stewart", "level": "municipal", "email": "kkennedy@districtofstewart.com"},
+  {"name": "Patty Lynn", "role": "Councillor", "jurisdiction": "Stewart", "level": "municipal", "email": "plynn@districtofstewart.com"},
+  {"name": "Brock Nelson", "role": "Councillor", "jurisdiction": "Stewart", "level": "municipal", "email": "bnelson@districtofstewart.com"},
+  {"name": "Nina Russell", "role": "Councillor", "jurisdiction": "Stewart", "level": "municipal", "email": "nrussell@districtofstewart.com"}
+]

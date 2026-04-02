@@ -197,6 +197,62 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'import-municipal-seed':
+        require_once __DIR__ . '/../../app/db.php';
+        $seedFile = __DIR__ . '/../../config/seed_municipal_emails.json';
+        if (!file_exists($seedFile)) {
+            echo json_encode(['error' => 'Municipal seed file not found']);
+            break;
+        }
+        $data = json_decode(file_get_contents($seedFile), true);
+        if (!$data) {
+            echo json_encode(['error' => 'Invalid JSON']);
+            break;
+        }
+
+        $inserted = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        foreach ($data as $official) {
+            if (!isset($official['name'])) { $skipped++; continue; } // Skip comment entries
+            $name = trim($official['name'] ?? '');
+            $jurisdiction = trim($official['jurisdiction'] ?? '');
+            $email = trim($official['email'] ?? '');
+            $role = trim($official['role'] ?? 'Councillor');
+
+            if (!$name || !$jurisdiction) { $skipped++; continue; }
+
+            $parts = preg_split('/\s+/', $name);
+            $lastName = array_pop($parts);
+            $firstName = implode(' ', $parts);
+
+            // Find municipality_id
+            $municipalityId = null;
+            $stmt = $db->prepare('SELECT id FROM municipalities WHERE name LIKE ? LIMIT 1');
+            $stmt->execute(["%{$jurisdiction}%"]);
+            $municipalityId = $stmt->fetchColumn() ?: null;
+
+            // Check if this exact person exists
+            $stmt = $db->prepare('SELECT id, email FROM elected_officials WHERE name = ? AND jurisdiction_name = ? AND government_level = ?');
+            $stmt->execute([$name, $jurisdiction, 'municipal']);
+            $existing = $stmt->fetch();
+
+            if ($existing) {
+                $stmt = $db->prepare('UPDATE elected_officials SET first_name = ?, last_name = ?, role = ?, email = COALESCE(NULLIF(?, ""), email), municipality_id = COALESCE(?, municipality_id), source_name = ?, updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$firstName, $lastName, $role, $email, $municipalityId, 'seed_data+current_term', $existing['id']]);
+                $updated++;
+            } else {
+                $confidence = $email ? 2 : 1;
+                $stmt = $db->prepare('INSERT INTO elected_officials (government_level, jurisdiction_name, municipality_id, name, first_name, last_name, role, email, source_url, source_name, confidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = COALESCE(NULLIF(VALUES(email), ""), email), role = VALUES(role), updated_at = NOW()');
+                $stmt->execute(['municipal', $jurisdiction, $municipalityId, $name, $firstName, $lastName, $role, $email, '', 'seed_data+current_term', $confidence]);
+                $inserted++;
+            }
+        }
+
+        echo json_encode(['action' => 'import-municipal-seed', 'total' => count($data), 'inserted' => $inserted, 'updated' => $updated, 'skipped' => $skipped], JSON_PRETTY_PRINT);
+        break;
+
     case 'import-rd-seed':
         require_once __DIR__ . '/../../app/db.php';
         $seedFile = __DIR__ . '/../../config/seed_rd_directors.json';
