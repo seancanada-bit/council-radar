@@ -197,6 +197,44 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'cleanup-stale':
+        // Remove stale officials from our 16 monitored municipalities
+        // Keeps: current_term seed data, officials with emails, officials from non-Represent sources
+        // Removes: represent_api-only officials that don't have emails (likely previous term)
+        require_once __DIR__ . '/../../app/db.php';
+
+        $monitored = ['Parksville', 'Kamloops', 'Cranbrook', 'Colwood', 'Smithers', 'Quesnel', 'Trail', 'Revelstoke', 'Clearwater', 'Mackenzie', 'Sun Peaks', 'Houston', 'Stewart', 'Nanaimo', 'Victoria', 'Kelowna'];
+        $deleted = 0;
+
+        foreach ($monitored as $muni) {
+            // Delete represent_api-only officials without emails that aren't tagged as current term
+            $stmt = $db->prepare(
+                "DELETE FROM elected_officials
+                 WHERE government_level = 'municipal'
+                   AND jurisdiction_name LIKE ?
+                   AND (email IS NULL OR email = '')
+                   AND source_name = 'represent_api'
+                   AND name NOT IN (
+                       SELECT name FROM (
+                           SELECT name FROM elected_officials
+                           WHERE jurisdiction_name LIKE ? AND source_name LIKE '%current_term%'
+                       ) AS current_names
+                   )"
+            );
+            $stmt->execute(["%{$muni}%", "%{$muni}%"]);
+            $deleted += $stmt->rowCount();
+        }
+
+        // Also delete junk entries
+        $junkStmt = $db->prepare(
+            "DELETE FROM elected_officials WHERE name IN ('Community Charter', 'and Council', 'Contact Information', 'Nanaimo City Hall') AND government_level = 'municipal'"
+        );
+        $junkStmt->execute();
+        $deleted += $junkStmt->rowCount();
+
+        echo json_encode(['action' => 'cleanup-stale', 'deleted' => $deleted], JSON_PRETTY_PRINT);
+        break;
+
     case 'import-municipal-seed':
         require_once __DIR__ . '/../../app/db.php';
         $seedFile = __DIR__ . '/../../config/seed_municipal_emails.json';
