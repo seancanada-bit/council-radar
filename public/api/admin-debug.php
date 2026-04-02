@@ -173,6 +173,16 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'clear-subscribers':
+        require_once __DIR__ . '/../../app/db.php';
+        $db = DB::get();
+        $db->exec('DELETE FROM alerts_sent');
+        $stmt = $db->query('SELECT COUNT(*) FROM subscribers');
+        $count = $stmt->fetchColumn();
+        $db->exec('DELETE FROM subscribers');
+        echo json_encode(['action' => 'clear-subscribers', 'deleted' => (int) $count]);
+        break;
+
     case 'clear-rate-limits':
         require_once __DIR__ . '/../../app/db.php';
         $db = DB::get();
