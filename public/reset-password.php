@@ -20,7 +20,7 @@ if (empty($token)) {
     redirect('/forgot-password.php');
 }
 
-// Verify token exists and is not expired before showing the form
+// Verify token exists and is not expired
 $db = DB::get();
 $stmt = $db->prepare(
     'SELECT id FROM subscribers WHERE reset_token = ? AND reset_token_expires > NOW()'
@@ -38,19 +38,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Invalid form submission. Please try again.';
     }
 
-    $password     = $_POST['password'] ?? '';
-    $passwordConf = $_POST['password_confirm'] ?? '';
+    $password = $_POST['password'] ?? '';
+    $confirm  = $_POST['password_confirm'] ?? '';
 
     if (strlen($password) < 8) {
         $errors[] = 'Password must be at least 8 characters.';
     }
-    if ($password !== $passwordConf) {
+    if ($password !== $confirm) {
         $errors[] = 'Passwords do not match.';
     }
 
     if (empty($errors)) {
         if (Auth::resetPassword($token, $password)) {
-            flash('success', 'Your password has been reset. You can now log in with your new password.');
+            flash('success', 'Your password has been reset. You can now log in.');
             redirect('/login.php');
         } else {
             $errors[] = 'This reset link has expired. Please request a new one.';
@@ -63,37 +63,41 @@ layoutHeader('Reset Password', 'Set a new password for your CouncilRadar account
 
 <section class="auth-page">
     <div class="container container-narrow">
-        <h1>Reset Password</h1>
+        <div class="auth-card">
+            <div class="auth-card-header">
+                <h1>Reset Password</h1>
+                <p class="auth-subtitle">Choose a new password for your account.</p>
+            </div>
 
-        <?php if (!empty($errors)): ?>
-            <div class="alert alert-error">
-                <ul>
+            <?php if (!empty($errors)): ?>
+                <div class="alert alert-error">
                     <?php foreach ($errors as $err): ?>
-                        <li><?php echo h($err); ?></li>
+                        <p><?php echo h($err); ?></p>
                     <?php endforeach; ?>
-                </ul>
+                </div>
+            <?php endif; ?>
+
+            <form method="post" action="/reset-password.php" class="auth-form" novalidate>
+                <?php echo csrfField(); ?>
+                <input type="hidden" name="token" value="<?php echo h($token); ?>">
+
+                <div class="form-group">
+                    <label for="password">New Password</label>
+                    <input type="password" id="password" name="password" required minlength="8" placeholder="Minimum 8 characters">
+                </div>
+
+                <div class="form-group">
+                    <label for="password_confirm">Confirm New Password</label>
+                    <input type="password" id="password_confirm" name="password_confirm" required minlength="8">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">Reset Password</button>
+            </form>
+
+            <div class="auth-links">
+                <a href="/login.php">Back to login</a>
             </div>
-        <?php endif; ?>
-
-        <form method="post" action="/reset-password.php" class="auth-form" novalidate>
-            <?php echo csrfField(); ?>
-            <input type="hidden" name="token" value="<?php echo h($token); ?>">
-
-            <div class="form-group">
-                <label for="password">New Password</label>
-                <input type="password" id="password" name="password" minlength="8" required>
-                <small>Minimum 8 characters</small>
-            </div>
-
-            <div class="form-group">
-                <label for="password_confirm">Confirm New Password</label>
-                <input type="password" id="password_confirm" name="password_confirm" required>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-full">Reset Password</button>
-        </form>
-
-        <p class="auth-alt"><a href="/login.php">Back to login</a></p>
+        </div>
     </div>
 </section>
 

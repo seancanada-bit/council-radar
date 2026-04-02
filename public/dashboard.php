@@ -283,7 +283,7 @@ $flash = getFlash();
                 </div>
             <?php endif; ?>
 
-            <form method="post" action="/dashboard.php" style="max-width: 400px;">
+            <form method="post" action="/dashboard.php" class="auth-form" style="max-width: 420px;">
                 <?php echo csrfField(); ?>
                 <input type="hidden" name="action" value="change_password">
 
@@ -294,7 +294,7 @@ $flash = getFlash();
 
                 <div class="form-group">
                     <label for="new_password">New Password</label>
-                    <input type="password" id="new_password" name="new_password" required minlength="8">
+                    <input type="password" id="new_password" name="new_password" required minlength="8" placeholder="Minimum 8 characters">
                 </div>
 
                 <div class="form-group">
