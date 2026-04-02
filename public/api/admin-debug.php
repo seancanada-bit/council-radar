@@ -173,6 +173,15 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'clear-rate-limits':
+        require_once __DIR__ . '/../../app/db.php';
+        $db = DB::get();
+        $stmt = $db->query('SELECT COUNT(*) FROM rate_limits');
+        $count = $stmt->fetchColumn();
+        $db->exec('TRUNCATE TABLE rate_limits');
+        echo json_encode(['action' => 'clear-rate-limits', 'cleared' => (int) $count]);
+        break;
+
     default:
-        echo json_encode(['error' => 'Unknown action', 'available' => ['ls', 'read', 'log', 'status', 'phpinfo']]);
+        echo json_encode(['error' => 'Unknown action', 'available' => ['ls', 'read', 'log', 'status', 'phpinfo', 'clear-rate-limits']]);
 }
