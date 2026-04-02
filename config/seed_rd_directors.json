@@ -1,0 +1,597 @@
+[
+  {
+    "name": "Kate Segall",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area A (Mill Bay/Malahat)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Sierra Acton",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area B (Shawnigan Lake)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Mike Wilson",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area C (Cobble Hill)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Hilary Abbott",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area D (Cowichan Bay)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Alison Nicholson",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area E (Cowichan Station/Sahtlam/Glenora)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Ian Morrison",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area F (Cowichan Lake South/Skutz Falls)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Jesse McClinton",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area G (Saltair/Gulf Islands)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Ben Maartman",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area H (North Oyster/Diamond)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Karen Deck",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cowichan Valley Regional District - Electoral Area I (Youbou/Meade Creek)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Garry Jackman",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area A",
+    "level": "regional_district",
+    "email": "gjackman@rdck.bc.ca"
+  },
+  {
+    "name": "Roger Tierney",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area B",
+    "level": "regional_district",
+    "email": "rtierney@rdck.bc.ca"
+  },
+  {
+    "name": "Kelly Vandenberghe",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area C",
+    "level": "regional_district",
+    "email": "kvandenberghe@rdck.bc.ca"
+  },
+  {
+    "name": "Aimee Watson",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area D",
+    "level": "regional_district",
+    "email": "awatson@rdck.bc.ca"
+  },
+  {
+    "name": "Cheryl Graham",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area E",
+    "level": "regional_district",
+    "email": "cgraham@rdck.bc.ca"
+  },
+  {
+    "name": "Tom Newell",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area F",
+    "level": "regional_district",
+    "email": "tnewell@rdck.bc.ca"
+  },
+  {
+    "name": "Hans Cunningham",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area G",
+    "level": "regional_district",
+    "email": "hcunningham@rdck.bc.ca"
+  },
+  {
+    "name": "Walter Popoff",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area H",
+    "level": "regional_district",
+    "email": "wpopoff@rdck.bc.ca"
+  },
+  {
+    "name": "Andy Davidoff",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area I",
+    "level": "regional_district",
+    "email": "adavidoff@rdck.bc.ca"
+  },
+  {
+    "name": "Henny Hanegraaf",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area J",
+    "level": "regional_district",
+    "email": "hhanegraaf@rdck.bc.ca"
+  },
+  {
+    "name": "Teresa Weatherhead",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Central Kootenay - Electoral Area K",
+    "level": "regional_district",
+    "email": "tweatherhead@rdck.bc.ca"
+  },
+  {
+    "name": "Michelle Pottage",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Mount Waddington - Electoral Area A",
+    "level": "regional_district",
+    "email": "mpottage@rdmw.bc.ca"
+  },
+  {
+    "name": "Andrew Hory",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Mount Waddington - Electoral Area B",
+    "level": "regional_district",
+    "email": "ahory@rdmw.bc.ca"
+  },
+  {
+    "name": "Kathryn Wykes",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Mount Waddington - Electoral Area C",
+    "level": "regional_district",
+    "email": "kwykes@rdmw.bc.ca"
+  },
+  {
+    "name": "David Summers",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Mount Waddington - Electoral Area D",
+    "level": "regional_district",
+    "email": "dsummers@rdmw.bc.ca"
+  },
+  {
+    "name": "Ocean Rutherford",
+    "role": "Electoral Area Director",
+    "jurisdiction": "North Coast Regional District - Electoral Area A",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Karl Bergman",
+    "role": "Electoral Area Director",
+    "jurisdiction": "North Coast Regional District - Electoral Area C",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Johanne Young",
+    "role": "Electoral Area Director",
+    "jurisdiction": "North Coast Regional District - Electoral Area D",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Evan Putterill",
+    "role": "Electoral Area Director",
+    "jurisdiction": "North Coast Regional District - Electoral Area E",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Bob Fleming",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of North Okanagan - Electoral Area B (Swan Lake/Commonage)",
+    "level": "regional_district",
+    "email": "bob.fleming@rdno.ca"
+  },
+  {
+    "name": "Amanda Shatzko",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of North Okanagan - Electoral Area C (BX/Silver Star)",
+    "level": "regional_district",
+    "email": "amanda.shatzko@rdno.ca"
+  },
+  {
+    "name": "Rick Fairbairn",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of North Okanagan - Electoral Area D (Rural Lumby)",
+    "level": "regional_district",
+    "email": "rick.fairbairn@rdno.ca"
+  },
+  {
+    "name": "Jim Johnson",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of North Okanagan - Electoral Area E (Cherryville)",
+    "level": "regional_district",
+    "email": "jim.johnson@rdno.ca"
+  },
+  {
+    "name": "Allysa Hopkins",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of North Okanagan - Electoral Area F (Rural Enderby)",
+    "level": "regional_district",
+    "email": "allysa.hopkins@rdno.ca"
+  },
+  {
+    "name": "Sal DeMare",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Squamish-Lillooet Regional District - Electoral Area A",
+    "level": "regional_district",
+    "email": "saldemare27@gmail.com"
+  },
+  {
+    "name": "Vivian Birch-Jones",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Squamish-Lillooet Regional District - Electoral Area B",
+    "level": "regional_district",
+    "email": "vbjones@slrd.bc.ca"
+  },
+  {
+    "name": "Russell Mack",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Squamish-Lillooet Regional District - Electoral Area C",
+    "level": "regional_district",
+    "email": "rmack@slrd.bc.ca"
+  },
+  {
+    "name": "Tony Rainbow",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Squamish-Lillooet Regional District - Electoral Area D",
+    "level": "regional_district",
+    "email": "TRainbow@slrd.bc.ca"
+  },
+  {
+    "name": "Leonard Lee",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Sunshine Coast Regional District - Electoral Area A (Egmont/Pender Harbour)",
+    "level": "regional_district",
+    "email": "Leonard.Lee@scrd.ca"
+  },
+  {
+    "name": "Justine Gabias",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Sunshine Coast Regional District - Electoral Area B (Halfmoon Bay)",
+    "level": "regional_district",
+    "email": "justine.gabias@scrd.ca"
+  },
+  {
+    "name": "Kelly Backs",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Sunshine Coast Regional District - Electoral Area D (Roberts Creek)",
+    "level": "regional_district",
+    "email": "kelly.backs@scrd.ca"
+  },
+  {
+    "name": "Donna McMahon",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Sunshine Coast Regional District - Electoral Area E (Elphinstone)",
+    "level": "regional_district",
+    "email": "Donna.McMahon@scrd.ca"
+  },
+  {
+    "name": "Kate-Louise Stamford",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Sunshine Coast Regional District - Electoral Area F (West Howe Sound)",
+    "level": "regional_district",
+    "email": "kate.stamford@scrd.ca"
+  },
+  {
+    "name": "Nicole Audet",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area A (Red Bluff/Quesnel South)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Barb Bachmeier",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area B (Quesnel West/Bouchie Lake)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "John Massier",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area C (Bowron Lake/Barlow Creek/Barkerville)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Steve Forseth",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area D (Commodore Heights/McLeese Lake)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Melynda Neufeld",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area E (South Lakeside/Dog Creek)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Maureen LeBourdais",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area F (150 Mile/Horsefly/Likely)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Al Richmond",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area G (Lac La Hache/108 Mile Ranch)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Margo Wagner",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area H (Canim Lake/Forest Grove)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Jim Glassford",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area I (Narcosli/Nazko/West Fraser)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Tolin Pare",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area J (West Chilcotin)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Betty Anderson",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area K (East Chilcotin)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Eric de Vries",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Cariboo Regional District - Electoral Area L (Lone Butte/Interlakes)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Jason Lennox",
+    "role": "Electoral Area Director",
+    "jurisdiction": "qathet Regional District - Electoral Area A",
+    "level": "regional_district",
+    "email": "jlennox@qathet.ca"
+  },
+  {
+    "name": "Mark Gisborne",
+    "role": "Electoral Area Director",
+    "jurisdiction": "qathet Regional District - Electoral Area B",
+    "level": "regional_district",
+    "email": "mgisborne@qathet.ca"
+  },
+  {
+    "name": "Clay Brander",
+    "role": "Electoral Area Director",
+    "jurisdiction": "qathet Regional District - Electoral Area C",
+    "level": "regional_district",
+    "email": "cbrander@qathet.ca"
+  },
+  {
+    "name": "Sandy McCormick",
+    "role": "Electoral Area Director",
+    "jurisdiction": "qathet Regional District - Electoral Area D",
+    "level": "regional_district",
+    "email": "smccormick@qathet.ca"
+  },
+  {
+    "name": "Andrew Fall",
+    "role": "Electoral Area Director",
+    "jurisdiction": "qathet Regional District - Electoral Area E",
+    "level": "regional_district",
+    "email": "afall@qathet.ca"
+  },
+  {
+    "name": "Bob Beckett",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Alberni-Clayoquot Regional District - Electoral Area A (Bamfield)",
+    "level": "regional_district",
+    "email": "bbeckett@acrd.bc.ca"
+  },
+  {
+    "name": "Fred Boyko",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Alberni-Clayoquot Regional District - Electoral Area B (Beaufort)",
+    "level": "regional_district",
+    "email": "fboyko@acrd.bc.ca"
+  },
+  {
+    "name": "Vaida Siga",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Alberni-Clayoquot Regional District - Electoral Area C (Long Beach)",
+    "level": "regional_district",
+    "email": "vsiga@acrd.bc.ca"
+  },
+  {
+    "name": "Penny Cote",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Alberni-Clayoquot Regional District - Electoral Area D (Sproat Lake)",
+    "level": "regional_district",
+    "email": "pcote@acrd.bc.ca"
+  },
+  {
+    "name": "Susan Roth",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Alberni-Clayoquot Regional District - Electoral Area E (Beaver Creek)",
+    "level": "regional_district",
+    "email": "sroth@acrd.bc.ca"
+  },
+  {
+    "name": "Mike Sparrow",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Alberni-Clayoquot Regional District - Electoral Area F (Cherry Creek)",
+    "level": "regional_district",
+    "email": "msparrow@acrd.bc.ca"
+  },
+  {
+    "name": "Reid Graham",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Peace River Regional District - Electoral Area B",
+    "level": "regional_district",
+    "email": "reid.graham@prrd.bc.ca"
+  },
+  {
+    "name": "Brad Sperling",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Peace River Regional District - Electoral Area C",
+    "level": "regional_district",
+    "email": "brad.sperling@prrd.bc.ca"
+  },
+  {
+    "name": "Leonard Hiebert",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Peace River Regional District - Electoral Area D",
+    "level": "regional_district",
+    "email": "leonard.hiebert@prrd.bc.ca"
+  },
+  {
+    "name": "Dan Rose",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Peace River Regional District - Electoral Area E",
+    "level": "regional_district",
+    "email": "dan.rose@prrd.bc.ca"
+  },
+  {
+    "name": "Eric Nyce",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Kitimat-Stikine - Electoral Area A",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Cyra Yunkws",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Kitimat-Stikine - Electoral Area B",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Bruce Bidgood",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Kitimat-Stikine - Electoral Area C",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Dave Brocklebank",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Kitimat-Stikine - Electoral Area D",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Ted Ramsey",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Kitimat-Stikine - Electoral Area E (Thornhill)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Tina Etzerza",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Regional District of Kitimat-Stikine - Electoral Area F (Dease Lake)",
+    "level": "regional_district",
+    "email": ""
+  },
+  {
+    "name": "Usoff Tsao",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area A (Wells Gray Country)",
+    "level": "regional_district",
+    "email": "director.utsao@tnrd.ca"
+  },
+  {
+    "name": "Lee Onslow",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area B (Thompson Headwaters)",
+    "level": "regional_district",
+    "email": "director.lonslow@tnrd.ca"
+  },
+  {
+    "name": "Jim Smith",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area E (Bonaparte Plateau)",
+    "level": "regional_district",
+    "email": "director.jsmith@tnrd.ca"
+  },
+  {
+    "name": "Tricia Thorpe",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area I (Blue Sky Country)",
+    "level": "regional_district",
+    "email": "director.tthorpe@tnrd.ca"
+  },
+  {
+    "name": "Michael Grenier",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area J (Copper Desert Country)",
+    "level": "regional_district",
+    "email": "director.mgrenier@tnrd.ca"
+  },
+  {
+    "name": "Doug Haughton",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area L (Grasslands)",
+    "level": "regional_district",
+    "email": "director.dhaughton@tnrd.ca"
+  },
+  {
+    "name": "David Laird",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area M (Beautiful Nicola Valley - North)",
+    "level": "regional_district",
+    "email": "director.dlaird@tnrd.ca"
+  },
+  {
+    "name": "Herb Graham",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area N (Beautiful Nicola Valley - South)",
+    "level": "regional_district",
+    "email": "herbgraham@telus.net"
+  },
+  {
+    "name": "Jill Hayward",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area O (Lower North Thompson)",
+    "level": "regional_district",
+    "email": "director.jhayward@tnrd.ca"
+  },
+  {
+    "name": "Lee Morris",
+    "role": "Electoral Area Director",
+    "jurisdiction": "Thompson-Nicola Regional District - Electoral Area P (Rivers and the Peaks)",
+    "level": "regional_district",
+    "email": "director.lmorris@tnrd.ca"
+  }
+]

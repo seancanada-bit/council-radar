@@ -197,6 +197,53 @@ switch ($action) {
         ], JSON_PRETTY_PRINT);
         break;
 
+    case 'import-rd-seed':
+        require_once __DIR__ . '/../../app/db.php';
+        $seedFile = __DIR__ . '/../../config/seed_rd_directors.json';
+        if (!file_exists($seedFile)) {
+            echo json_encode(['error' => 'RD seed file not found']);
+            break;
+        }
+        $data = json_decode(file_get_contents($seedFile), true);
+        if (!$data) {
+            echo json_encode(['error' => 'Invalid JSON']);
+            break;
+        }
+
+        $db->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+        $inserted = 0;
+        $updated = 0;
+        foreach ($data as $official) {
+            $name = trim($official['name'] ?? '');
+            $jurisdiction = trim($official['jurisdiction'] ?? '');
+            $email = trim($official['email'] ?? '');
+            $role = trim($official['role'] ?? 'Electoral Area Director');
+
+            if (!$name || !$jurisdiction) continue;
+
+            $parts = preg_split('/\s+/', $name);
+            $lastName = array_pop($parts);
+            $firstName = implode(' ', $parts);
+
+            $stmt = $db->prepare('SELECT id, email FROM elected_officials WHERE name = ? AND jurisdiction_name = ? AND government_level = ?');
+            $stmt->execute([$name, $jurisdiction, 'regional_district']);
+            $existing = $stmt->fetch();
+
+            if ($existing) {
+                $stmt = $db->prepare('UPDATE elected_officials SET first_name = ?, last_name = ?, role = ?, email = COALESCE(NULLIF(?, ""), email), source_name = COALESCE(source_name, ?), updated_at = NOW() WHERE id = ?');
+                $stmt->execute([$firstName, $lastName, $role, $email, 'seed_data', $existing['id']]);
+                $updated++;
+            } else {
+                $confidence = $email ? 2 : 1;
+                $stmt = $db->prepare('INSERT INTO elected_officials (government_level, jurisdiction_name, name, first_name, last_name, role, email, source_url, source_name, confidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = COALESCE(NULLIF(VALUES(email), ""), email), role = VALUES(role), updated_at = NOW()');
+                $stmt->execute(['regional_district', $jurisdiction, $name, $firstName, $lastName, $role, $email, '', 'seed_data', $confidence]);
+                $inserted++;
+            }
+        }
+
+        echo json_encode(['action' => 'import-rd-seed', 'total' => count($data), 'inserted' => $inserted, 'updated' => $updated], JSON_PRETTY_PRINT);
+        break;
+
     case 'import-seed':
         require_once __DIR__ . '/../../app/db.php';
         $seedFile = __DIR__ . '/../../config/seed_officials.json';
