@@ -1,0 +1,46 @@
+name: Scrape CivicInfo BC Officials
+
+on:
+  # Run monthly on the 1st at 3 AM Pacific
+  schedule:
+    - cron: '0 10 1 * *'
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Run CivicInfo BC scraper
+        run: node scripts/scrape-civicinfo.js
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet config/civicinfo_officials.json 2>/dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push results
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add config/civicinfo_officials.json
+          git commit -m "Update CivicInfo BC officials data [automated]"
+          git push
