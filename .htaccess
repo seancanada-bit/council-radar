@@ -15,10 +15,18 @@
     RewriteCond %{REQUEST_URI} ^/\.well-known/ [NC]
     RewriteRule ^ - [L]
 
-    # Block access to protected directories
+    # Block access to protected directories.
+    #
+    # The docroot is the repo root on this host, so every directory here is
+    # web-reachable unless listed. scripts/ and config/ were missing: that left
+    # scripts/reclaim-raw-html.php, which clears database columns and runs
+    # OPTIMIZE TABLE, executable over HTTP. That script now also refuses to run
+    # outside the CLI, so this list is the second layer rather than the only one.
     RewriteRule ^app/ - [F,L]
+    RewriteRule ^config/ - [F,L]
     RewriteRule ^cron/ - [F,L]
     RewriteRule ^logs/ - [F,L]
+    RewriteRule ^scripts/ - [F,L]
     RewriteRule ^sql/ - [F,L]
     RewriteRule ^templates/ - [F,L]
 

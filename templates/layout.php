@@ -10,7 +10,9 @@
  *   layoutFooter();
  */
 
-function layoutHeader(string $pageTitle = 'CouncilRadar', string $pageDescription = 'Municipal agenda monitoring for BC, Canada. Get alerts when council agendas match your interests.'): void {
+// $noindex is for pages that must never be indexed, such as the 404 handler.
+// Optional and defaults to false, so existing callers are unaffected.
+function layoutHeader(string $pageTitle = 'CouncilRadar', string $pageDescription = 'Municipal agenda monitoring for BC, Canada. Get alerts when council agendas match your interests.', bool $noindex = false): void {
     $siteName = 'CouncilRadar';
     $fullTitle = ($pageTitle !== $siteName) ? "$pageTitle - $siteName" : $siteName;
     $year = date('Y');
@@ -21,7 +23,7 @@ function layoutHeader(string $pageTitle = 'CouncilRadar', string $pageDescriptio
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="<?php echo htmlspecialchars($pageDescription); ?>">
-    <meta name="robots" content="index, follow">
+    <meta name="robots" content="<?php echo $noindex ? 'noindex' : 'index, follow'; ?>">
     <title><?php echo htmlspecialchars($fullTitle); ?></title>
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="canonical" href="<?php echo htmlspecialchars(SITE_URL . $_SERVER['REQUEST_URI']); ?>">

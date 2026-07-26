@@ -27,6 +27,15 @@
  *   php scripts/reclaim-raw-html.php --no-optimize
  */
 
+// CLI only. The docroot is the repo root on this host, so anything under
+// scripts/ is reachable over HTTP unless .htaccess blocks it. A script that
+// NULLs database columns and runs OPTIMIZE TABLE must never be triggerable by a
+// web request, and this guard holds even if the .htaccess rules are wrong.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 chdir(__DIR__ . '/..');
 
 require 'app/config.php';
