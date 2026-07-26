@@ -17,7 +17,9 @@ $startTime = date('Y-m-d H:i:s');
 file_put_contents($logFile, "[{$startTime}] Cleanup job started\n", FILE_APPEND);
 
 try {
-    $pdo = getDb();
+    // Was getDb(), which does not exist anywhere in the codebase. app/db.php
+    // provides a singleton class instead, which is what the rest of the app uses.
+    $pdo = DB::get();
 
     // Delete scrape_log entries older than 90 days
     $stmt = $pdo->prepare("DELETE FROM scrape_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
@@ -41,10 +43,19 @@ try {
     $endTime = date('Y-m-d H:i:s');
     file_put_contents($logFile, "[{$endTime}] Cleanup job completed\n", FILE_APPEND);
 
-} catch (Exception $e) {
+// Throwable, not Exception. The getDb() failure raised an Error, which is a
+// Throwable but not an Exception, so this block never ran and the job died as an
+// uncaught fatal with nothing written to the cleanup log.
+} catch (Throwable $e) {
     $errorTime = date('Y-m-d H:i:s');
     $errorMsg = "[{$errorTime}] CRITICAL ERROR: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
 
     file_put_contents($logFile, $errorMsg, FILE_APPEND);
-    notifyAdmin('Cleanup job failed: ' . $e->getMessage());
+
+    // notifyAdmin takes (subject, body). It was being called with one argument,
+    // so even reaching this line would have thrown a TypeError.
+    notifyAdmin(
+        'CouncilRadar cleanup job failed',
+        $e->getMessage() . "\n\n" . $e->getTraceAsString()
+    );
 }

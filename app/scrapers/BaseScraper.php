@@ -13,6 +13,22 @@ abstract class BaseScraper {
     protected int $timeout;
     protected string $userAgent;
 
+    /**
+     * Hard cap on a single response body, in bytes.
+     *
+     * Agenda pages are HTML, so a few hundred KB at most. Without a cap, a
+     * municipality that serves a large PDF or a huge attachment from an agenda
+     * URL buffers the whole thing into memory and kills the process:
+     *
+     *   PHP Fatal error: Allowed memory size of 134217728 bytes exhausted
+     *   (tried to allocate 98570240 bytes) in BaseScraper.php on line 55
+     *
+     * That is a fatal, not an exception, so it took down the entire nightly
+     * scrape rather than skipping one municipality. 8 MB leaves plenty of room
+     * for legitimate pages while staying well under the 128 MB limit.
+     */
+    protected int $maxBodyBytes = 8388608;
+
     public function __construct() {
         $this->db = DB::get();
         $this->requestDelay = SCRAPER_REQUEST_DELAY;
@@ -35,10 +51,14 @@ abstract class BaseScraper {
      * Returns ['body' => string, 'code' => int, 'error' => string|null]
      */
     protected function fetch(string $url): array {
+        $body = '';
+        $bytes = 0;
+        $tooLarge = false;
+
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_RETURNTRANSFER => false, // body is collected by the write callback
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 5,
             CURLOPT_TIMEOUT => $this->timeout,
@@ -50,14 +70,47 @@ abstract class BaseScraper {
                 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language: en-CA,en;q=0.5',
             ],
+            // Cheap early bail when the server sends a Content-Length.
+            CURLOPT_MAXFILESIZE => $this->maxBodyBytes,
+            // The real guard. MAXFILESIZE does nothing for chunked responses or
+            // when Content-Length is absent, and it sees the compressed size
+            // rather than the decoded size. This callback receives decoded bytes,
+            // so it catches a small gzipped response that expands enormously.
+            // Returning a value other than the chunk length aborts the transfer.
+            CURLOPT_WRITEFUNCTION => function ($handle, string $chunk) use (&$body, &$bytes, &$tooLarge): int {
+                $len = strlen($chunk);
+                if ($bytes + $len > $this->maxBodyBytes) {
+                    $tooLarge = true;
+                    return 0;
+                }
+                $bytes += $len;
+                $body .= $chunk;
+                return $len;
+            },
         ]);
 
-        $body = curl_exec($ch);
+        $ok = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $errno = curl_errno($ch);
         $error = curl_error($ch);
         curl_close($ch);
 
-        if ($body === false) {
+        // Check the size guards before the generic failure branch: aborting the
+        // transfer deliberately also sets an error, and treating that as a
+        // network failure would hide the real cause.
+        if ($tooLarge || $errno === CURLE_FILESIZE_EXCEEDED) {
+            return [
+                'body' => '',
+                'code' => $code,
+                'error' => sprintf(
+                    'Response exceeded the %d byte cap, skipped: %s',
+                    $this->maxBodyBytes,
+                    $url
+                ),
+            ];
+        }
+
+        if ($ok === false) {
             return ['body' => '', 'code' => 0, 'error' => $error ?: 'cURL request failed'];
         }
 
