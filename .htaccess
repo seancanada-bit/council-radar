@@ -28,11 +28,28 @@
     # Route root to public/index.php
     RewriteRule ^$ public/index.php [L]
 
-    # Route everything else through public/
-    # Skip if the file already exists (e.g. public/ files after first rewrite pass)
+    # Route a request through public/, but only when the target actually exists
+    # there. The existence test is load-bearing: the previous version rewrote
+    # unconditionally, so a path that did not exist became public/<path>, failed
+    # the !-f test again, became public/public/<path>, and kept going until
+    # Apache hit its internal redirect limit and returned 500. Search engines
+    # read 500 as "broken, retry later" rather than "gone", so dead URLs never
+    # dropped out of the index.
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f [OR]
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -d
     RewriteRule ^(.+)$ public/$1 [L]
+
+    # Anything still unresolved is genuinely unknown. Serve the 404 page
+    # directly instead of via ErrorDocument, which fails on this host: the
+    # subrequest itself errors and Apache returns 500 with "a 500 Internal
+    # Server Error was encountered while trying to use an ErrorDocument".
+    # public/404.php sends the 404 status itself. No loop is possible because
+    # that file exists, so the !-f condition stops matching on the next pass.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ /public/404.php [L]
 </IfModule>
 
 # Deny access to sensitive files
