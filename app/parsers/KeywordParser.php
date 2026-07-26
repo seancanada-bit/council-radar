@@ -19,18 +19,42 @@ class KeywordParser {
      * Parse all unparsed meetings
      */
     public function parseAll(): array {
-        $stmt = $this->db->query('SELECT * FROM meetings WHERE parsed = 0');
-        $meetings = $stmt->fetchAll();
+        // Load ids only, then fetch one meeting at a time inside the loop.
+        //
+        // This was previously SELECT * with fetchAll(), which pulled raw_html for
+        // every unparsed meeting into a single array. raw_html is LONGTEXT running
+        // to megabytes per row, so the job's memory need grew with the backlog and
+        // eventually exceeded the 128 MB limit. It died on 2026-05-05 at meeting
+        // #103 and never recovered: each night the scraper added more meetings,
+        // making the next run need even more memory. 528 meetings went unparsed.
+        //
+        // Peak memory is now one meeting rather than all of them, so the backlog
+        // size no longer affects whether the job can run.
+        $ids = $this->db
+            ->query('SELECT id FROM meetings WHERE parsed = 0 ORDER BY id')
+            ->fetchAll(PDO::FETCH_COLUMN);
 
-        $results = ['total' => count($meetings), 'parsed' => 0, 'items_created' => 0];
+        $results = ['total' => count($ids), 'parsed' => 0, 'items_created' => 0];
 
-        foreach ($meetings as $meeting) {
+        $rowStmt = $this->db->prepare('SELECT * FROM meetings WHERE id = ?');
+
+        foreach ($ids as $id) {
+            // Throwable, not Exception: a parse error in one meeting should never
+            // take down the rest of the run.
             try {
+                $rowStmt->execute([$id]);
+                $meeting = $rowStmt->fetch();
+                if (!$meeting) {
+                    continue;
+                }
+
                 $itemCount = $this->parseMeeting($meeting);
                 $results['parsed']++;
                 $results['items_created'] += $itemCount;
-            } catch (Exception $e) {
-                logMessage('parse.log', "ERROR parsing meeting #{$meeting['id']}: " . $e->getMessage());
+
+                unset($meeting);
+            } catch (Throwable $e) {
+                logMessage('parse.log', "ERROR parsing meeting #{$id}: " . $e->getMessage());
             }
         }
 
@@ -256,7 +280,20 @@ class KeywordParser {
      * Mark a meeting as parsed
      */
     private function markParsed(int $meetingId): void {
-        $stmt = $this->db->prepare('UPDATE meetings SET parsed = 1 WHERE id = ?');
+        // raw_html is cleared in the same statement that marks the meeting parsed.
+        //
+        // It is only ever read by parseMeeting(), and parseAll() selects
+        // WHERE parsed = 0, so once a meeting is parsed nothing reads the column
+        // again. Holding it was costing real space: the meetings table was 1.2 GB
+        // on disk for 631 meetings, growing roughly 300 MB a month, while
+        // agenda_items (the parsed output the app actually queries) was under 1 MB.
+        //
+        // cron/cleanup.php used to clear this after a year. That window had no
+        // functional basis and meant nothing was reclaimed until March 2027.
+        //
+        // Trade-off: re-parsing an old meeting after a parser improvement now
+        // requires re-fetching it, since the source HTML is gone.
+        $stmt = $this->db->prepare('UPDATE meetings SET parsed = 1, raw_html = NULL WHERE id = ?');
         $stmt->execute([$meetingId]);
     }
 

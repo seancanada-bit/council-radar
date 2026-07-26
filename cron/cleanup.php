@@ -33,8 +33,16 @@ try {
 
     file_put_contents($logFile, "[" . date('Y-m-d H:i:s') . "] Rate limits cleaned\n", FILE_APPEND);
 
-    // NULL out raw_html for parsed meetings older than 1 year to save space
-    $stmt = $pdo->prepare("UPDATE meetings SET raw_html = NULL WHERE parsed = 1 AND scraped_at < DATE_SUB(NOW(), INTERVAL 1 YEAR) AND raw_html IS NOT NULL");
+    // Backstop for raw_html. KeywordParser::markParsed() now clears the column at
+    // parse time, so this should normally match zero rows. It catches anything
+    // parsed before that change, and any row where the parse committed but the
+    // clear did not.
+    //
+    // The previous version only cleared rows older than 1 YEAR, which meant none
+    // of the 1.2 GB accumulated since launch would have been reclaimed until
+    // March 2027. There is no reason to wait: the column is unreadable to the app
+    // the moment parsed = 1.
+    $stmt = $pdo->prepare("UPDATE meetings SET raw_html = NULL WHERE parsed = 1 AND raw_html IS NOT NULL");
     $stmt->execute();
     $rawHtmlCleared = $stmt->rowCount();
 
